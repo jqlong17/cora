@@ -64,6 +64,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **One-click Toggle**: Preview/Markdown button in editor top-right to switch modes
 - **Outline Sync**: Outline remains visible and functional in preview mode
 
+**Cursor vs VS Code**: In Cursor you get inline Preview/Markdown toggle buttons. In VS Code, if those buttons don’t appear, use `Cmd+Shift+V` (preview) and `Cmd+E` (edit), or the icons in the editor title bar.
+
 ## Quick Start
 
 ### Installation
@@ -97,8 +99,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 5. **Edit and Preview**
    - Click Markdown file → Opens in preview mode by default
-   - Click **Markdown** button in top-right to switch to edit mode
-   - Click **Preview** button in top-right to switch back to preview
+   - **Cursor**: Use the **Markdown** / **Preview** buttons in the editor area
+   - **VS Code**: If no inline buttons, use `Cmd+Shift+V` (preview), `Cmd+E` (edit), or the title bar icons
 
 ## Keyboard Shortcuts
 
@@ -137,6 +139,23 @@ Search for "knowledgeBase" in VS Code settings to configure:
 | `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode |
 | `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions |
 | `knowledgeBase.autoReveal` | boolean | `true` | Auto reveal current file in page tree |
+
+## Roadmap
+
+Planned features to be implemented by priority.
+
+### Basic Features
+
+- **Flat view**: Page module will support a flat view of all Markdown files, sorted by modification time (newest first), for quick browsing and navigation
+- **MD normalization**: One-click Markdown standardization to fix common format issues in LLM-generated content, e.g.:
+  - Spacing around emphasis (bold/italic) markers
+  - Table separator rows and alignment
+  - Mermaid code block syntax errors
+
+### AI Features
+
+- **Skill generation**: Use AI to analyze the whole repo or selected code and produce reproducible Skill documentation
+- **Architecture diagram**: Use AI to analyze repo code architecture and generate architecture diagrams (e.g. Mermaid)
 
 ## Languages
 

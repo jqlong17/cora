@@ -64,6 +64,8 @@ Cora 将两者结合：
 - **一键切换**: 编辑器右上角 Preview/Markdown 按钮切换模式
 - **大纲同步**: 预览模式下大纲仍然显示和可用
 
+**Cursor 与 VS Code 差异**：在 Cursor 中会看到内联的 Preview/Markdown 切换按钮；在 VS Code 中若未看到按钮，可用快捷键 `Cmd+Shift+V`（预览）与 `Cmd+E`（编辑）切换，或点击编辑器标题栏右侧的预览/编辑图标。
+
 ## 快速开始
 
 ### 安装
@@ -97,8 +99,8 @@ Cora 将两者结合：
 
 5. **编辑与预览**
    - 点击 Markdown 文件 → 默认以预览模式打开
-   - 点击右上角 **Markdown** 按钮切换到编辑模式
-   - 点击右上角 **Preview** 按钮切换回预览模式
+   - **Cursor**：点击内容区右上角 **Markdown** / **Preview** 按钮切换
+   - **VS Code**：若无内联按钮，使用 `Cmd+Shift+V`（预览）、`Cmd+E`（编辑），或标题栏右侧图标切换
 
 ## 快捷键
 
@@ -137,6 +139,23 @@ Cora 将两者结合：
 | `knowledgeBase.filterMode` | string | `"markdown"` | 页面树的文件过滤模式 |
 | `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | 识别的 Markdown 文件扩展名 |
 | `knowledgeBase.autoReveal` | boolean | `true` | 自动在页面树中显示当前打开的文件 |
+
+## Roadmap
+
+以下为计划中的功能，将按优先级逐步实现。
+
+### 基础功能
+
+- **平铺视图**：页面模块支持切换为平铺展示所有 Markdown 文件，按修改时间降序排列，便于快速浏览与定位
+- **MD 标准化**：一键将 Markdown 文件标准化，自动修复大模型生成内容中的常见格式问题，例如：
+  - 强调符（粗体/斜体）前后空格
+  - 表格分隔行与对齐
+  - Mermaid 代码块语法错误等
+
+### AI 功能
+
+- **Skill 生成**：利用 AI 对整个仓库或指定代码进行分析，总结出可复现代码的 Skill 文档
+- **架构图生成**：利用 AI 分析仓库代码架构，自动总结并输出架构图（如 Mermaid 等）
 
 ## 语言
 
