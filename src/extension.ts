@@ -20,6 +20,9 @@ export function activate(context: vscode.ExtensionContext) {
     const outlineProvider = new OutlineProvider(outlineService, configService);
     const databaseProvider = new DatabaseProvider();
 
+    // 跟踪最后已知的文档 URI（用于预览模式）
+    let lastKnownUri: vscode.Uri | undefined = undefined;
+
     // 注册树视图
     const pageTreeView = vscode.window.createTreeView('pageTree', {
         treeDataProvider: pageTreeProvider,
@@ -109,12 +112,19 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             console.log('Active text editor changed:', editor ? editor.document.fileName : 'undefined');
             if (editor) {
+                // Track the last known URI from the editor
+                lastKnownUri = editor.document.uri;
                 outlineProvider.updateForEditor(editor);
             } else {
-                // Editor is undefined, might be preview mode - check active tab
+                // Editor is undefined, might be preview mode
+                // Try to get URI from tab, fallback to lastKnownUri
                 const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
                 if (activeTab) {
-                    const uri = getUriFromTab(activeTab);
+                    let uri = getUriFromTab(activeTab);
+                    if (!uri && lastKnownUri) {
+                        console.log('Using last known URI:', lastKnownUri.toString());
+                        uri = lastKnownUri;
+                    }
                     if (uri) {
                         outlineProvider.updateForUri(uri);
                     } else {
@@ -130,7 +140,12 @@ export function activate(context: vscode.ExtensionContext) {
             console.log('Tabs changed, open tabs:', e.opened.length, 'closed tabs:', e.closed.length);
             const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
             if (activeTab) {
-                const uri = getUriFromTab(activeTab);
+                let uri = getUriFromTab(activeTab);
+                // If tab has no input but we have lastKnownUri, use it
+                if (!uri && lastKnownUri) {
+                    console.log('Tab has no input, using last known URI:', lastKnownUri.toString());
+                    uri = lastKnownUri;
+                }
                 if (uri) {
                     console.log('Active tab URI:', uri.toString());
                     outlineProvider.updateForUri(uri);
@@ -180,7 +195,10 @@ export function activate(context: vscode.ExtensionContext) {
             if (e.focused) {
                 const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
                 if (activeTab) {
-                    const uri = getUriFromTab(activeTab);
+                    let uri = getUriFromTab(activeTab);
+                    if (!uri && lastKnownUri) {
+                        uri = lastKnownUri;
+                    }
                     if (uri) {
                         outlineProvider.updateForUri(uri);
                     }
@@ -191,6 +209,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 初始化当前编辑器的大纲
     if (vscode.window.activeTextEditor) {
+        lastKnownUri = vscode.window.activeTextEditor.document.uri;
         outlineProvider.updateForEditor(vscode.window.activeTextEditor);
     }
 
