@@ -76,28 +76,27 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     private getHtml(content: string): string {
-        const nonce = this.getNonce();
         marked.setOptions({ gfm: true, breaks: true });
         const htmlContent = marked.parse(content);
         const escapedContent = JSON.stringify(content);
 
         const css = this.getCSS();
-        const js = this.getJS(escapedContent, nonce);
+        const js = this.getJS(escapedContent);
 
         return `<!DOCTYPE html>
 <html lang="zh-CN" data-initial-mode="preview">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>Markdown Editor</title>
     <style>${css}</style>
 </head>
 <body>
     <div class="toolbar">
         <div class="mode-toggle">
-            <button class="mode-btn" id="previewBtn" onclick="switchMode('preview')">Preview</button>
-            <button class="mode-btn" id="editBtn" onclick="switchMode('edit')">Markdown</button>
+            <button class="mode-btn" id="previewBtn">Preview</button>
+            <button class="mode-btn" id="editBtn">Markdown</button>
         </div>
         <div id="debugMode" style="margin-left: 16px; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: white; background: #666;">Mode: initializing...</div>
     </div>
@@ -109,7 +108,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             <div class="preview-content" id="previewContent">${htmlContent}</div>
         </div>
     </div>
-    <script nonce="${nonce}">${js}</script>
+    <script>${js}</script>
 </body>
 </html>`;
     }
@@ -262,93 +261,95 @@ textarea {
 `;
     }
 
-    private getJS(escapedContent: string, nonce: string): string {
+    private getJS(escapedContent: string): string {
         return `
-const vscode = acquireVsCodeApi();
+(function() {
+    const vscode = acquireVsCodeApi();
 
-// Debug logging helper
-function debugLog(...args) {
-    const msg = '[Cora Webview] ' + args.join(' ');
-    console.log(msg);
-    vscode.postMessage({ command: 'log', data: args.join(' ') });
-}
-
-debugLog('=== Webview Script Loading ===');
-
-// Always default to preview mode, ignore any persisted state
-const DEFAULT_MODE = 'preview';
-let currentMode = DEFAULT_MODE;
-
-debugLog('DEFAULT_MODE:', DEFAULT_MODE);
-debugLog('currentMode initialized to:', currentMode);
-
-document.getElementById('editor').value = ${escapedContent};
-
-function switchMode(mode) {
-    debugLog('switchMode called:', mode);
-    currentMode = mode;
-    vscode.setState({ mode: mode });
-    updateUI(mode);
-}
-
-function updateUI(mode) {
-    debugLog('updateUI called with mode:', mode);
-    document.getElementById('previewBtn').classList.toggle('active', mode === 'preview');
-    document.getElementById('editBtn').classList.toggle('active', mode === 'edit');
-    document.getElementById('editorView').classList.toggle('hidden', mode !== 'edit');
-    document.getElementById('previewView').classList.toggle('hidden', mode !== 'preview');
-
-    // Update debug display
-    const debugEl = document.getElementById('debugMode');
-    if (debugEl) {
-        debugEl.textContent = 'Mode: ' + mode;
-        debugEl.style.background = mode === 'preview' ? '#4CAF50' : '#2196F3';
+    // Debug logging helper
+    function debugLog(...args) {
+        const msg = '[Cora Webview] ' + args.join(' ');
+        console.log(msg);
+        vscode.postMessage({ command: 'log', data: args.join(' ') });
     }
 
-    if (mode === 'edit') {
-        setTimeout(function() { document.getElementById('editor').focus(); }, 0);
+    debugLog('=== Webview Script Loading ===');
+
+    // Always default to preview mode, ignore any persisted state
+    const DEFAULT_MODE = 'preview';
+    let currentMode = DEFAULT_MODE;
+
+    debugLog('DEFAULT_MODE:', DEFAULT_MODE);
+    debugLog('currentMode initialized to:', currentMode);
+
+    document.getElementById('editor').value = ${escapedContent};
+
+    function switchMode(mode) {
+        debugLog('switchMode called:', mode);
+        currentMode = mode;
+        vscode.setState({ mode: mode });
+        updateUI(mode);
     }
-}
 
-let timeout;
-document.getElementById('editor').addEventListener('input', function(e) {
-    clearTimeout(timeout);
-    timeout = setTimeout(function() {
-        vscode.postMessage({ command: 'save', content: e.target.value });
-    }, 500);
-});
+    function updateUI(mode) {
+        debugLog('updateUI called with mode:', mode);
+        document.getElementById('previewBtn').classList.toggle('active', mode === 'preview');
+        document.getElementById('editBtn').classList.toggle('active', mode === 'edit');
+        document.getElementById('editorView').classList.toggle('hidden', mode !== 'edit');
+        document.getElementById('previewView').classList.toggle('hidden', mode !== 'preview');
 
-window.addEventListener('message', function(event) {
-    debugLog('Received message:', event.data.command);
-    if (event.data.command === 'setMode') {
-        debugLog('Setting mode to:', event.data.mode);
-        currentMode = event.data.mode;
-        updateUI(event.data.mode);
-    } else if (event.data.command === 'updateContent') {
-        document.getElementById('editor').value = event.data.content;
+        // Update debug display
+        const debugEl = document.getElementById('debugMode');
+        if (debugEl) {
+            debugEl.textContent = 'Mode: ' + mode;
+            debugEl.style.background = mode === 'preview' ? '#4CAF50' : '#2196F3';
+        }
+
+        if (mode === 'edit') {
+            setTimeout(function() { document.getElementById('editor').focus(); }, 0);
+        }
     }
-});
 
-// Initialize with default mode (preview)
-debugLog('Calling updateUI with DEFAULT_MODE:', DEFAULT_MODE);
-updateUI(DEFAULT_MODE);
+    // Set up button click handlers
+    document.getElementById('previewBtn').addEventListener('click', function() {
+        switchMode('preview');
+    });
+    document.getElementById('editBtn').addEventListener('click', function() {
+        switchMode('edit');
+    });
 
-// Also notify extension that we're ready
-debugLog('Sending ready message to extension');
-vscode.postMessage({ command: 'ready' });
+    let timeout;
+    document.getElementById('editor').addEventListener('input', function(e) {
+        clearTimeout(timeout);
+        timeout = setTimeout(function() {
+            vscode.postMessage({ command: 'save', content: e.target.value });
+        }, 500);
+    });
 
-// Log initial state of elements
-debugLog('editorView hidden class:', document.getElementById('editorView').classList.contains('hidden'));
-debugLog('previewView hidden class:', document.getElementById('previewView').classList.contains('hidden'));
+    window.addEventListener('message', function(event) {
+        debugLog('Received message:', event.data.command);
+        if (event.data.command === 'setMode') {
+            debugLog('Setting mode to:', event.data.mode);
+            currentMode = event.data.mode;
+            updateUI(event.data.mode);
+        } else if (event.data.command === 'updateContent') {
+            document.getElementById('editor').value = event.data.content;
+        }
+    });
+
+    // Initialize with default mode (preview)
+    debugLog('Calling updateUI with DEFAULT_MODE:', DEFAULT_MODE);
+    updateUI(DEFAULT_MODE);
+
+    // Also notify extension that we're ready
+    debugLog('Sending ready message to extension');
+    vscode.postMessage({ command: 'ready' });
+
+    // Log initial state of elements
+    debugLog('editorView hidden class:', document.getElementById('editorView').classList.contains('hidden'));
+    debugLog('previewView hidden class:', document.getElementById('previewView').classList.contains('hidden'));
+})();
 `;
     }
 
-    private getNonce(): string {
-        let text = '';
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
-    }
 }
