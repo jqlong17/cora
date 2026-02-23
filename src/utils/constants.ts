@@ -21,8 +21,8 @@ export const COMMANDS = {
     NEW_FOLDER: `${EXTENSION_NAME}.newFolder`,
     DELETE_ITEM: `${EXTENSION_NAME}.deleteItem`,
     RENAME_ITEM: `${EXTENSION_NAME}.renameItem`,
-    COLLAPSE_ALL: `${EXTENSION_NAME}.collapseAll`,
-    EXPAND_ALL: `${EXTENSION_NAME}.expandAll`,
+    OUTLINE_COLLAPSE_ALL: `${EXTENSION_NAME}.outlineCollapseAll`,
+    OUTLINE_EXPAND_ALL: `${EXTENSION_NAME}.outlineExpandAll`,
     GOTO_HEADING: `${EXTENSION_NAME}.gotoHeading`
 } as const;
 

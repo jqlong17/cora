@@ -1,20 +1,15 @@
 import * as vscode from 'vscode';
-import { PageTreeProvider } from '../providers/pageTreeProvider';
+import type { OutlineProvider } from '../providers/outlineProvider';
 
-export async function collapseAll(
-    treeView: vscode.TreeView<unknown>
-): Promise<void> {
-    // VS Code TreeView API doesn't have a direct collapseAll method
-    // We need to use the command
-    await vscode.commands.executeCommand('workbench.actions.treeView.pageTree.collapseAll');
+const OUTLINE_VIEW_ID = 'kbOutline';
+
+export async function outlineCollapseAll(): Promise<void> {
+    await vscode.commands.executeCommand(`workbench.actions.treeView.${OUTLINE_VIEW_ID}.collapseAll`);
+    vscode.window.showInformationMessage('大纲已全部折叠');
 }
 
-export async function expandAll(
-    pageTreeProvider: PageTreeProvider,
-    treeView: vscode.TreeView<unknown>
-): Promise<void> {
-    // Note: VS Code TreeView API doesn't support programmatic expansion of all nodes
-    // This is a limitation of the current API
-    // We can only expand one node at a time using reveal()
-    vscode.window.showInformationMessage('全部展开功能将在后续版本优化');
+/** 通过 reveal() 逐节点展开，绕过 VS Code 缓存折叠状态的限制 */
+export async function outlineExpandAll(outlineProvider: OutlineProvider): Promise<void> {
+    await outlineProvider.expandAll();
+    vscode.window.showInformationMessage('大纲已全部展开');
 }

@@ -72,7 +72,7 @@
       },
       {
         "view": "search",
-        "contents": "搜索笔记内容\n支持：• 单个关键词：A • 多个关键词：A B\n[开始搜索](command:knowledgeBase.searchNotes)"
+        "contents": "搜索笔记内容。支持单个关键词（A）或多个关键词（A B，空格分隔）。\n执行 [搜索](command:knowledgeBase.searchNotes) 打开输入框。"
       }
     ],
     "commands": [
@@ -83,7 +83,7 @@
       },
       {
         "command": "knowledgeBase.toggleFilter",
-        "title": "切换过滤",
+        "title": "显示全部文件 / 仅显示 MD 文件",
         "icon": "$(filter)"
       },
       {
@@ -132,12 +132,12 @@
         "icon": "$(edit)"
       },
       {
-        "command": "knowledgeBase.collapseAll",
+        "command": "knowledgeBase.outlineCollapseAll",
         "title": "全部折叠",
         "icon": "$(collapse-all)"
       },
       {
-        "command": "knowledgeBase.expandAll",
+        "command": "knowledgeBase.outlineExpandAll",
         "title": "全部展开",
         "icon": "$(expand-all)"
       },
@@ -201,24 +201,24 @@
           "group": "navigation@1"
         },
         {
-          "command": "knowledgeBase.collapseAll",
+          "command": "knowledgeBase.refreshPageTree",
           "when": "view == pageTree",
           "group": "navigation@2"
         },
         {
-          "command": "knowledgeBase.expandAll",
+          "command": "knowledgeBase.newNote",
           "when": "view == pageTree",
           "group": "navigation@3"
         },
         {
-          "command": "knowledgeBase.refreshPageTree",
-          "when": "view == pageTree",
-          "group": "navigation@4"
+          "command": "knowledgeBase.outlineCollapseAll",
+          "when": "view == kbOutline",
+          "group": "navigation@1"
         },
         {
-          "command": "knowledgeBase.newNote",
-          "when": "view == pageTree",
-          "group": "navigation@5"
+          "command": "knowledgeBase.outlineExpandAll",
+          "when": "view == kbOutline",
+          "group": "navigation@2"
         },
         {
           "command": "knowledgeBase.searchNotes",

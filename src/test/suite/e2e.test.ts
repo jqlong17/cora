@@ -37,22 +37,38 @@ suite('Cora E2E Test Suite', () => {
             fs.mkdirSync(testWorkspacePath, { recursive: true });
         }
 
-        // 创建测试笔记
+        // 创建测试笔记（内容较丰富，便于搜索、大纲等测试）
         const testFiles = [
             {
                 name: '项目计划.md',
                 content: `# 项目计划
 
 ## 需求分析
-这是项目的需求分析部分。
+这是项目的需求分析部分。需要明确功能范围、用户角色与验收标准。
+
+### 功能范围
+- 知识库管理：页面树、全文搜索、大纲导航
+- 编辑体验：Markdown 预览、快捷键、多关键词搜索
+- 扩展配置：过滤模式、平铺/树形、点击是否默认预览
+
+### 非功能需求
+性能：大工作区下树与搜索需可接受延迟。兼容：VS Code / Cursor 主流版本。
 
 ## 技术方案
-使用 TypeScript 开发。
+使用 TypeScript 开发，依赖 VS Code 扩展 API。
+
+### 前端
+- 树视图：TreeDataProvider，支持平铺按修改时间排序
+- 大纲：从当前文档解析标题层级
+- 搜索：多关键词 AND，无结果时降级 OR
+
+### 后端与配置
+配置项通过 workspace.getConfiguration 读写，无独立后端。
 
 ## 时间安排
-- 第一阶段：设计
-- 第二阶段：开发
-- 第三阶段：测试
+- 第一阶段：设计（架构、配置项、UI 草图）
+- 第二阶段：开发（核心命令、视图、搜索与大纲）
+- 第三阶段：测试（单元 + E2E，修复回归）
 `
             },
             {
@@ -60,15 +76,25 @@ suite('Cora E2E Test Suite', () => {
                 content: `# 会议纪要
 
 ## 参会人员
-- 张三
-- 李四
+- 张三（产品）
+- 李四（开发）
+- 王五（测试）
 
 ## 讨论内容
-讨论了项目进度和下一步计划。
+讨论了项目进度和下一步计划。当前完成度约 60%，树形视图与搜索已可用，大纲与配置需收尾。
+
+### 风险与依赖
+- 依赖 VS Code Markdown 预览 API，需验证各版本行为
+- 大仓库下首次扫描可能较慢，考虑增量或缓存
+
+## 决议事项
+1. 下周五前完成全部配置项与文档
+2. 预留一天做兼容性测试
 
 ## 行动计划
-1. 完成需求文档
-2. 开始原型设计
+1. 完成需求文档并评审
+2. 开始原型设计与交互细节
+3. 排期 E2E 与性能用例
 `
             },
             {
@@ -78,10 +104,19 @@ suite('Cora E2E Test Suite', () => {
 ## 书名：《设计模式》
 
 ## 核心观点
-设计模式是解决软件设计问题的可复用方案。
+设计模式是解决软件设计问题的可复用方案，强调面向接口编程与组合优于继承。
+
+### 创建型
+单例、工厂方法、抽象工厂、建造者、原型。常用：工厂与单例。
+
+### 结构型
+适配器、桥接、组合、装饰器、外观、享元、代理。常用：适配器与装饰器。
+
+### 行为型
+责任链、命令、解释器、迭代器、中介者、备忘录、观察者、状态、策略、模板方法、访问者。常用：观察者与策略。
 
 ## 笔记
-单例模式、工厂模式、观察者模式等。
+单例模式、工厂模式、观察者模式等在业务代码中经常出现；结合 TypeScript 的接口与泛型可以写得更清晰。
 `
             }
         ];
@@ -94,29 +129,116 @@ suite('Cora E2E Test Suite', () => {
         // 构造体现平铺模式优势的文档树：多层文件夹 + 不同修改时间，平铺时按 mtime 降序便于找「最近改过的」
         const docsDir = path.join(testWorkspacePath, 'docs');
         const notes2024Dir = path.join(testWorkspacePath, 'notes', '2024');
+        const refDir = path.join(testWorkspacePath, '参考');
         fs.mkdirSync(docsDir, { recursive: true });
         fs.mkdirSync(notes2024Dir, { recursive: true });
+        fs.mkdirSync(refDir, { recursive: true });
+
+        const longDocContent = `# 长文档：知识库使用指南
+
+## 简介
+本文档用于 E2E 测试中的长文场景，包含多级标题与较多段落，便于验证大纲折叠、搜索高亮与滚动等行为。
+
+## 安装与配置
+
+### 安装扩展
+在 VS Code 或 Cursor 的扩展市场搜索 Cora，安装后重载窗口即可。
+
+### 工作区要求
+扩展依赖当前工作区根目录，请用「文件 -> 打开文件夹」打开你的笔记根目录（可包含多个子文件夹）。
+
+### 常用配置项
+- \`knowledgeBase.previewOnClick\`：点击侧栏文件时是否默认打开预览
+- \`knowledgeBase.filterMode\`：默认「仅 Markdown」或「显示全部文件」
+- \`knowledgeBase.pageViewMode\`：平铺或树形
+
+## 页面树
+
+### 平铺模式
+所有 Markdown 文件按修改时间降序排列，便于快速找到最近编辑的文档。
+
+### 树形模式
+按磁盘目录结构展示，支持新建笔记、新建文件夹、重命名、删除等操作。
+
+### 过滤
+可切换「显示全部文件」与「仅显示 MD 文件」，标题栏按钮会显示当前状态。
+
+## 大纲
+打开任意 Markdown 文件后，大纲视图会解析 H1～H6 标题并支持点击跳转。支持全部展开与全部折叠。
+
+## 搜索
+支持单个或多个关键词（空格分隔）。多关键词为 AND 逻辑；若无结果会自动降级为 OR。搜索结果展示文件名、匹配次数与预览片段。
+
+## 小结
+以上内容仅作测试数据，用于验证扩展在长文档、多层级下的表现。
+`;
 
         const nestedFiles: { path: string; content: string; mtimeOffsetMs: number }[] = [
             {
                 path: path.join(docsDir, '需求文档.md'),
-                content: '# 需求文档\n\n## 功能列表\n- 用户登录\n- 数据导出\n',
+                content: `# 需求文档
+
+## 功能列表
+- 用户登录：支持邮箱/手机号与密码，可选记住登录状态
+- 数据导出：支持导出为 CSV、Excel，可按时间范围筛选
+- 权限管理：角色分为管理员、编辑、只读，支持按目录授权
+
+## 非功能
+- 响应时间：列表与搜索 P95 < 2s
+- 兼容：Chrome / Edge 最新两个大版本
+`,
                 mtimeOffsetMs: -2 * 24 * 60 * 60 * 1000
             },
             {
                 path: path.join(docsDir, '设计文档.md'),
-                content: '# 设计文档\n\n## 架构\n- 前端 React\n- 后端 Node\n',
+                content: `# 设计文档
+
+## 架构
+- 前端：React + TypeScript，组件按功能模块划分
+- 后端：Node.js + Express，RESTful API
+- 数据库：PostgreSQL，读写分离
+- 缓存：Redis 用于会话与热点数据
+
+## 模块划分
+- 用户中心：注册、登录、个人设置
+- 业务核心：订单、支付、库存
+- 运营后台：报表、审核、配置
+`,
                 mtimeOffsetMs: -1 * 24 * 60 * 60 * 1000
             },
             {
                 path: path.join(notes2024Dir, '周报-01.md'),
-                content: '# 周报 第1周\n\n## 完成项\n- 需求评审\n',
+                content: `# 周报 第1周
+
+## 完成项
+- 需求评审：与产品对齐 MVP 范围与优先级
+- 技术选型：确定前后端栈与部署方式
+- 环境搭建：开发/测试/预发环境与 CI 流水线
+
+## 下周计划
+- 完成详细设计文档与接口定义
+- 启动用户模块开发
+`,
                 mtimeOffsetMs: -12 * 60 * 60 * 1000
             },
             {
                 path: path.join(notes2024Dir, '周报-02.md'),
-                content: '# 周报 第2周\n\n## 完成项\n- 接口设计\n- 数据库表设计\n',
+                content: `# 周报 第2周
+
+## 完成项
+- 接口设计：核心 API 的请求/响应与错误码
+- 数据库表设计：用户、订单、日志等主表与索引
+- 用户模块：注册、登录、Token 刷新接口已联调
+
+## 风险与阻塞
+- 第三方登录需等企业资质审批，暂时仅支持账号密码
+`,
                 mtimeOffsetMs: 0
+            },
+            {
+                path: path.join(refDir, '长文档.md'),
+                content: longDocContent,
+                mtimeOffsetMs: -6 * 60 * 60 * 1000
             }
         ];
         const baseTime = Date.now();
@@ -166,7 +288,7 @@ suite('Cora E2E Test Suite', () => {
 
     suite('Extension Activation', () => {
         test('should activate Cora extension', async () => {
-            const coraExtension = vscode.extensions.getExtension('cora.cora');
+            const coraExtension = vscode.extensions.getExtension('jqlong.cora');
             assert.ok(coraExtension, 'Cora extension should be installed');
 
             if (!coraExtension.isActive) {
@@ -188,10 +310,9 @@ suite('Cora E2E Test Suite', () => {
                 'knowledgeBase.clearSearch',
                 'knowledgeBase.openEditor',
                 'knowledgeBase.openPreview',
-                'knowledgeBase.openTextEditor',
                 'knowledgeBase.toggleFilter',
-                'knowledgeBase.collapseAll',
-                'knowledgeBase.expandAll',
+                'knowledgeBase.outlineCollapseAll',
+                'knowledgeBase.outlineExpandAll',
                 'knowledgeBase.refreshPageTree',
                 'knowledgeBase.gotoHeading',
                 'knowledgeBase.revealInFinder',
@@ -474,16 +595,23 @@ suite('Cora E2E Test Suite', () => {
             // 通过编辑器更新大纲提供者
             await outlineProvider.updateForEditor(editor);
 
-            // 获取所有标题项
-            const items = await outlineProvider.getChildren();
-            assert.ok(items.length > 0, 'Should have outline items');
+            // getChildren() 不传参数只返回根节点（H1）
+            const rootItems = await outlineProvider.getChildren();
+            assert.ok(rootItems.length > 0, 'Should have root outline items');
 
-            // 验证层级结构
-            const h1Items = items.filter(item => item.heading.level === 1);
-            const h2Items = items.filter(item => item.heading.level === 2);
+            const h1Root = rootItems.find(item => item.heading.level === 1);
+            assert.ok(h1Root, 'Should have an H1 root item');
 
-            assert.strictEqual(h1Items.length, 1, 'Should have 1 H1 item');
-            assert.ok(h2Items.length >= 2, 'Should have at least 2 H2 items');
+            // 获取 H1 的子节点（H2）
+            const h2Items = await outlineProvider.getChildren(h1Root!);
+            assert.ok(h2Items.length >= 2, 'H1 should have at least 2 H2 children');
+            h2Items.forEach(item => {
+                assert.strictEqual(item.heading.level, 2, 'Children of H1 should be H2');
+            });
+
+            // 获取第一个 H2 的子节点（H3）
+            const h3Items = await outlineProvider.getChildren(h2Items[0]);
+            assert.ok(h3Items.length >= 1, 'H2 should have at least 1 H3 child');
 
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
         });

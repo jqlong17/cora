@@ -26,13 +26,13 @@ export function activate(context: vscode.ExtensionContext) {
     // 注册树视图
     const pageTreeView = vscode.window.createTreeView('pageTree', {
         treeDataProvider: pageTreeProvider,
-        showCollapseAll: true,
+        showCollapseAll: false,
         canSelectMany: false
     });
 
     const outlineTreeView = vscode.window.createTreeView('kbOutline', {
         treeDataProvider: outlineProvider,
-        showCollapseAll: true,
+        showCollapseAll: false,
         canSelectMany: false
     });
 
@@ -64,11 +64,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('knowledgeBase.showMarkdownOnly', () => {
             commands.setFilterMode('markdown', configService, pageTreeProvider);
         }),
-        vscode.commands.registerCommand('knowledgeBase.collapseAll', () => {
-            commands.collapseAll(pageTreeView);
+        vscode.commands.registerCommand('knowledgeBase.outlineCollapseAll', () => {
+            commands.outlineCollapseAll();
         }),
-        vscode.commands.registerCommand('knowledgeBase.expandAll', () => {
-            commands.expandAll(pageTreeProvider, pageTreeView);
+        vscode.commands.registerCommand('knowledgeBase.outlineExpandAll', () => {
+            commands.outlineExpandAll(outlineProvider);
         }),
 
         // 文件操作命令

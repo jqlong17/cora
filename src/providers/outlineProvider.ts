@@ -56,6 +56,25 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
         this._onDidChangeTreeData.fire();
     }
 
+    /**
+     * 全部展开：用 treeView.reveal() 逐根节点展开（expand:5 覆盖 H1~H6 所有层级）。
+     * reveal() 要求 getParent() 已实现，否则会静默失败。
+     */
+    async expandAll(): Promise<void> {
+        if (!this.treeView) {
+            return;
+        }
+        // 先 refresh，让 TreeView 用最新数据重建节点
+        this.refresh();
+        // 等 TreeView 完成本轮渲染
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const roots = await this.getChildren();
+        for (const item of roots) {
+            // expand: 5 表示展开该节点及其 5 层后代，足够覆盖 H1~H6
+            await this.treeView.reveal(item, { expand: 5, select: false, focus: false });
+        }
+    }
+
     clear(): void {
         this.currentHeadings = [];
         this.currentEditor = undefined;
@@ -93,6 +112,27 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
 
     getTreeItem(element: OutlineItem): vscode.TreeItem {
         return element;
+    }
+
+    /**
+     * reveal() 正常工作的必要条件：TreeDataProvider 必须实现 getParent()，
+     * 否则 VS Code 无法沿树向上定位节点，reveal() 会静默失败。
+     */
+    getParent(element: OutlineItem): OutlineItem | undefined {
+        const parentMap = this.buildParentMap();
+        const idx = this.currentHeadings.findIndex(
+            h => h.line === element.heading.line && h.text === element.heading.text
+        );
+        if (idx === -1) {
+            return undefined;
+        }
+        const parentIdx = parentMap[idx];
+        if (parentIdx === -1) {
+            return undefined;
+        }
+        const parentHeading = this.currentHeadings[parentIdx];
+        const parentHasChildren = parentMap.some(p => p === parentIdx);
+        return new OutlineItem(parentHeading, parentHasChildren);
     }
 
     async getChildren(element?: OutlineItem): Promise<OutlineItem[]> {
