@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "VS Code 知识管理插件 - 提供页面树、大纲导航、数据库视图等知识管理功能",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -356,7 +356,8 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
-    "seed-test-workspace": "node scripts/seed-test-workspace.js"
+    "seed-test-workspace": "node scripts/seed-test-workspace.js",
+    "publish:all": "./scripts/publish.sh"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
