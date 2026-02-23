@@ -41,6 +41,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
                 webviewPanel.webview.postMessage({ command: 'setMode', mode: message.mode });
             } else if (message.command === 'save') {
                 await this.saveDocument(document, message.content);
+            } else if (message.command === 'ready') {
+                // Webview is ready, ensure it's in preview mode
+                webviewPanel.webview.postMessage({ command: 'setMode', mode: 'preview' });
             }
         });
 
@@ -52,9 +55,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     private setInitialHtml(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
         const content = document.getText();
         panel.webview.html = this.getHtml(content);
-        setTimeout(() => {
-            panel.webview.postMessage({ command: 'setMode', mode: 'preview' });
-        }, 300);
+        // The webview will send 'ready' message when loaded, then we set preview mode
     }
 
     private async saveDocument(document: vscode.TextDocument, content: string): Promise<void> {
@@ -258,15 +259,16 @@ textarea {
         return `
 const vscode = acquireVsCodeApi();
 
-const htmlElement = document.documentElement;
-const initialMode = htmlElement.getAttribute('data-initial-mode') || 'preview';
-let currentMode = initialMode;
+// Always default to preview mode, ignore any persisted state
+const DEFAULT_MODE = 'preview';
+let currentMode = DEFAULT_MODE;
 
 document.getElementById('editor').value = ${escapedContent};
 
 function switchMode(mode) {
     currentMode = mode;
-    vscode.postMessage({ command: 'switchMode', mode: mode });
+    // Save current mode to state (for potential future use)
+    vscode.setState({ mode: mode });
     updateUI(mode);
 }
 
@@ -290,6 +292,8 @@ document.getElementById('editor').addEventListener('input', function(e) {
 
 window.addEventListener('message', function(event) {
     if (event.data.command === 'setMode') {
+        // Always override with preview mode on initial load
+        // The extension sends 'preview' to force this behavior
         currentMode = event.data.mode;
         updateUI(event.data.mode);
     } else if (event.data.command === 'updateContent') {
@@ -297,7 +301,11 @@ window.addEventListener('message', function(event) {
     }
 });
 
-updateUI(currentMode);
+// Initialize with default mode (preview)
+updateUI(DEFAULT_MODE);
+
+// Also notify extension that we're ready
+vscode.postMessage({ command: 'ready' });
 `;
     }
 
