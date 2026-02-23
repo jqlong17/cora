@@ -305,6 +305,7 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
 }
 
 // Helper function to open markdown preview by default (using VS Code native preview)
+// Opens both editor and preview so the toggle buttons are visible
 async function openTextEditor(uri: vscode.Uri): Promise<void> {
     try {
         // Check if it's a markdown file
@@ -312,8 +313,13 @@ async function openTextEditor(uri: vscode.Uri): Promise<void> {
         const isMarkdown = document.languageId === 'markdown';
 
         if (isMarkdown) {
-            // Open VS Code native markdown preview for markdown files
-            // This opens the preview with Preview/Markdown toggle buttons
+            // First open the text editor (this creates the editor tab)
+            await vscode.window.showTextDocument(document, {
+                preview: false,
+                preserveFocus: false,
+                viewColumn: vscode.ViewColumn.One
+            });
+            // Then open the preview - this will show the Preview/Markdown toggle
             await vscode.commands.executeCommand('markdown.showPreview', uri);
         } else {
             // Open text editor for non-markdown files
