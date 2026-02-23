@@ -30,9 +30,11 @@ export class SearchItem extends vscode.TreeItem {
     }
 }
 
-export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<SearchItem | undefined | null | void> = new vscode.EventEmitter<SearchItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<SearchItem | undefined | null | void> = this._onDidChangeTreeData.event;
+export type SearchTreeItem = SearchItem | vscode.TreeItem;
+
+export class SearchProvider implements vscode.TreeDataProvider<SearchTreeItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<SearchTreeItem | undefined | null | void> = new vscode.EventEmitter<SearchTreeItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<SearchTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private searchResults: SearchResult[] = [];
     private lastQuery: string = '';
@@ -54,16 +56,55 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
         this.refresh();
     }
 
-    getTreeItem(element: SearchItem): vscode.TreeItem {
+    getTreeItem(element: SearchTreeItem): vscode.TreeItem {
         return element;
     }
 
-    async getChildren(): Promise<SearchItem[]> {
+    async getChildren(): Promise<SearchTreeItem[]> {
+        const items: SearchTreeItem[] = [];
+
+        // 创建搜索输入项
+        const inputItem = new vscode.TreeItem(
+            this.lastQuery || '🔍 点击输入搜索关键词...',
+            vscode.TreeItemCollapsibleState.None
+        );
+        inputItem.tooltip = this.lastQuery
+            ? `当前搜索: "${this.lastQuery}"\n点击进行新搜索`
+            : '点击输入搜索关键词\n支持：单个关键词 或 多个关键词（空格分隔）';
+        inputItem.description = this.lastQuery ? '点击修改搜索词' : '';
+        inputItem.iconPath = new vscode.ThemeIcon('search');
+        inputItem.command = {
+            command: 'knowledgeBase.searchNotes',
+            title: '搜索笔记',
+            arguments: []
+        };
+        items.push(inputItem);
+
         if (this.searchResults.length === 0) {
-            return [];
+            // 如果没有结果，只显示搜索输入项
+            return items;
         }
 
-        return this.searchResults.map(result => new SearchItem(result));
+        // 添加搜索结果
+        for (const result of this.searchResults) {
+            items.push(new SearchItem(result));
+        }
+
+        // 添加清除结果项
+        const clearItem = new vscode.TreeItem(
+            '🗑️ 清除搜索结果',
+            vscode.TreeItemCollapsibleState.None
+        );
+        clearItem.tooltip = '清除当前搜索结果';
+        clearItem.iconPath = new vscode.ThemeIcon('clear-all');
+        clearItem.command = {
+            command: 'knowledgeBase.clearSearch',
+            title: '清除搜索',
+            arguments: []
+        };
+        items.push(clearItem);
+
+        return items;
     }
 
     async search(query: string): Promise<void> {

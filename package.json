@@ -70,7 +70,7 @@
       },
       {
         "view": "search",
-        "contents": "搜索笔记内容\n\n支持：\n• 单个关键词：A\n• 多个关键词：A B（同时包含）\n\n[开始搜索](command:knowledgeBase.searchNotes)"
+        "contents": "搜索笔记内容\n支持：• 单个关键词：A • 多个关键词：A B\n[开始搜索](command:knowledgeBase.searchNotes)"
       }
     ],
     "commands": [

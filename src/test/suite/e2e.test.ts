@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { FileService } from '../../services/fileService';
 import { ConfigService } from '../../services/configService';
 import { PageTreeProvider } from '../../providers/pageTreeProvider';
-import { SearchProvider } from '../../providers/searchProvider';
+import { SearchProvider, SearchItem } from '../../providers/searchProvider';
 import { OutlineProvider, OutlineItem } from '../../providers/outlineProvider';
 import { OutlineService } from '../../services/outlineService';
 
@@ -449,8 +449,11 @@ suite('Cora E2E Test Suite', () => {
             await searchProvider.search('项目 需求');
             const results = await searchProvider.getChildren();
 
+            // 过滤出 SearchItem（第一个是输入项，可能有清除项）
+            const searchItems = results.filter(r => 'result' in r) as SearchItem[];
+
             // 结果应该同时包含这两个关键词
-            for (const result of results) {
+            for (const result of searchItems) {
                 const content = fs.readFileSync(result.result.uri.fsPath, 'utf8');
                 assert.ok(content.includes('项目') && content.includes('需求'),
                     'Result should contain both keywords');
@@ -461,10 +464,13 @@ suite('Cora E2E Test Suite', () => {
             await searchProvider.search('模式');
             const results = await searchProvider.getChildren();
 
-            if (results.length >= 2) {
+            // 过滤出 SearchItem（第一个是输入项，可能有清除项）
+            const searchItems = results.filter(r => 'result' in r) as SearchItem[];
+
+            if (searchItems.length >= 2) {
                 // 验证按匹配次数降序排列
-                for (let i = 0; i < results.length - 1; i++) {
-                    assert.ok(results[i].result.matchCount >= results[i + 1].result.matchCount,
+                for (let i = 0; i < searchItems.length - 1; i++) {
+                    assert.ok(searchItems[i].result.matchCount >= searchItems[i + 1].result.matchCount,
                         'Results should be sorted by match count descending');
                 }
             }
@@ -478,10 +484,10 @@ suite('Cora E2E Test Suite', () => {
                 console.log('Search may have failed:', e);
             }
 
-            // 可能有结果也可能没有，清除后应该为空
+            // 可能有结果也可能没有，清除后应该只剩搜索输入项
             searchProvider.clear();
             const results = await searchProvider.getChildren();
-            assert.strictEqual(results.length, 0, 'Search results should be cleared');
+            assert.strictEqual(results.length, 1, 'Search results should be cleared, only input item remains');
         });
 
         test('should get last query', async () => {
@@ -494,15 +500,19 @@ suite('Cora E2E Test Suite', () => {
         test('should handle empty search', async () => {
             await searchProvider.search('');
             const results = await searchProvider.getChildren();
-            assert.strictEqual(results.length, 0, 'Empty search should return no results');
+            // 空搜索时应该只显示搜索输入项
+            assert.strictEqual(results.length, 1, 'Empty search should only show input item');
         });
 
         test('should generate preview for search results', async () => {
             await searchProvider.search('TypeScript');
             const results = await searchProvider.getChildren();
 
-            if (results.length > 0) {
-                const preview = results[0].result.preview;
+            // 过滤出 SearchItem（第一个是输入项，可能有清除项）
+            const searchItems = results.filter(r => 'result' in r) as SearchItem[];
+
+            if (searchItems.length > 0) {
+                const preview = searchItems[0].result.preview;
                 assert.ok(preview.length > 0, 'Should have preview text');
                 assert.ok(preview.length <= 53, 'Preview should be truncated with ellipsis if too long');
             }
