@@ -293,6 +293,15 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
         }
     }
 
+    // For Cora Custom Editor
+    if (input.viewType === 'cora.markdownEditor') {
+        // Custom editor stores URI in the 'uri' property
+        if (input.uri) {
+            console.log('Found Cora Custom Editor URI:', input.uri);
+            return typeof input.uri === 'string' ? vscode.Uri.file(input.uri) : input.uri;
+        }
+    }
+
     // Try common properties
     const possibleUri = input.resource || input.path || input.document || input.fileName || input.fsPath;
     if (possibleUri) {
