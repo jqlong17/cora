@@ -4,6 +4,10 @@
   "description": "VS Code 知识管理插件 - 提供页面树、大纲导航、数据库视图等知识管理功能",
   "version": "0.1.0",
   "publisher": "cora",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jqlong17/cora"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },

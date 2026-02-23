@@ -144,35 +144,105 @@ test('should execute commands', async () => {
 });
 ```
 
+### 编辑区显示与 Tab 状态测试
+
+测试点击 MD 文件后的编辑区显示效果和 Tab 切换状态：
+
+```typescript
+// 验证编辑区显示效果
+test('should open markdown file in editor with correct display', async () => {
+    const testFile = path.join(testWorkspacePath, '项目计划.md');
+    const document = await vscode.workspace.openTextDocument(testFile);
+    const editor = await vscode.window.showTextDocument(document);
+
+    // 验证编辑器已打开
+    assert.ok(editor, 'Editor should be opened');
+    assert.strictEqual(editor.document.languageId, 'markdown');
+
+    // 验证文档内容正确显示
+    const content = editor.document.getText();
+    assert.ok(content.includes('# 项目计划'), 'Should display H1 heading');
+
+    // 验证编辑器处于编辑模式
+    assert.ok(vscode.window.activeTextEditor, 'Should be in edit mode');
+});
+
+// 验证 Tab 切换状态
+test('should switch to preview mode and reflect in tab state', async () => {
+    const testFile = path.join(testWorkspacePath, '会议纪要.md');
+    const document = await vscode.workspace.openTextDocument(testFile);
+    await vscode.window.showTextDocument(document);
+
+    // 切换到预览模式
+    await vscode.commands.executeCommand('knowledgeBase.openPreview');
+
+    // 验证 Tab 状态
+    const previewTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    assert.ok(previewTab, 'Should have active tab');
+    assert.ok(previewTab.label.includes('会议纪要'), 'Tab label should show filename');
+});
+```
+
 ### 关键测试用例
 
-#### 页面树测试
-- [x] 扩展激活
-- [x] 视图创建
-- [ ] 文件操作（创建/删除/重命名）
-- [ ] 过滤切换
-- [ ] 展开/折叠
+## 测试覆盖清单
 
-#### 大纲测试
-- [x] 标题提取
-- [x] 文档切换
-- [ ] 大纲跳转
-- [ ] 层级折叠
-- [ ] 预览模式同步
+### 功能测试（44 个测试用例）
 
-#### 搜索测试
-- [ ] 单关键词搜索
-- [ ] 多关键词搜索
-- [ ] 智能降级
-- [ ] 结果排序
-- [ ] 清除搜索
+| 模块 | 测试项 | 状态 |
+|------|--------|------|
+| **扩展激活** | 扩展激活 | ✅ |
+| | 命令注册（18 个命令） | ✅ |
+| **页面树** | Provider 创建 | ✅ |
+| | 获取子项 | ✅ |
+| | 刷新 | ✅ |
+| | TreeItem 提供 | ✅ |
+| **文件操作** | 新建笔记文件 | ✅ |
+| | 新建文件夹 | ✅ |
+| | 重命名文件 | ✅ |
+| | 删除文件 | ✅ |
+| | 获取工作区文件夹 | ✅ |
+| **过滤和显示** | Markdown 过滤 | ✅ |
+| | 全部文件过滤 | ✅ |
+| | 获取扩展名列表 | ✅ |
+| **大纲视图** | 标题提取 | ✅ |
+| | 文档切换时更新 | ✅ |
+| | 跳转到标题行 | ✅ |
+| | 层级结构 | ✅ |
+| | 清除大纲 | ✅ |
+| **搜索功能** | 单关键词搜索 | ✅ |
+| | 多关键词搜索（AND 逻辑） | ✅ |
+| | 结果排序（匹配次数） | ✅ |
+| | 清除搜索结果 | ✅ |
+| | 获取最后查询 | ✅ |
+| | 空搜索处理 | ✅ |
+| | 搜索预览生成 | ✅ |
+| **编辑区显示** | Markdown 文件正确显示 | ✅ |
+| | 切换到预览模式 | ✅ |
+| | 编辑/预览切换 | ✅ |
+| | 从页面树打开更新大纲 | ✅ |
+| | 多文件切换 Tab 状态 | ✅ |
+| **右键菜单** | 复制路径到剪贴板 | ✅ |
+| | 复制相对路径 | ✅ |
+| | 复制文件 | ✅ |
+| | 在 Finder 中打开 | ✅ |
+| **配置** | 默认配置 | ✅ |
+| | 配置更改 | ✅ |
+| | 从 Service 获取配置 | ✅ |
+| **工具函数** | Markdown 标题解析 | ✅ |
+| | 文件类型识别 | ✅ |
+| | 文件名净化 | ✅ |
+| | 文件图标获取 | ✅ |
 
-#### 命令测试
-- [x] 命令注册
-- [ ] 新建笔记
-- [ ] 新建文件夹
-- [ ] 编辑/预览切换
-- [ ] 文件操作命令
+### 单元测试（5 个测试用例）
+
+| 模块 | 测试项 | 状态 |
+|------|--------|------|
+| **markdownParser** | parseHeadings 提取标题 | ✅ |
+| | parseHeadings 处理特殊字符 | ✅ |
+| | isMarkdownFile 识别 | ✅ |
+| | isMarkdownFile 大小写不敏感 | ✅ |
+| | getFileIcon 返回正确图标 | ✅ |
 
 ## 调试测试
 
