@@ -49,8 +49,8 @@
           "when": "true"
         },
         {
-          "id": "database",
-          "name": "数据库",
+          "id": "search",
+          "name": "搜索",
           "when": "true"
         }
       ]
@@ -65,8 +65,8 @@
         "contents": "打开 Markdown 文件查看大纲结构"
       },
       {
-        "view": "database",
-        "contents": "数据库视图即将推出\n\n此功能将在后续版本中实现，支持将 Markdown 文件以表格/看板形式展示"
+        "view": "search",
+        "contents": "搜索笔记内容\n\n支持：\n• 单个关键词：A\n• 多个关键词：A B（同时包含）\n\n[开始搜索](command:knowledgeBase.searchNotes)"
       }
     ],
     "commands": [
@@ -167,6 +167,16 @@
         "command": "knowledgeBase.copyFile",
         "title": "复制文件",
         "icon": "$(files)"
+      },
+      {
+        "command": "knowledgeBase.searchNotes",
+        "title": "搜索笔记",
+        "icon": "$(search)"
+      },
+      {
+        "command": "knowledgeBase.clearSearch",
+        "title": "清除搜索",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -207,6 +217,16 @@
           "command": "knowledgeBase.newNote",
           "when": "view == pageTree",
           "group": "navigation@5"
+        },
+        {
+          "command": "knowledgeBase.searchNotes",
+          "when": "view == search",
+          "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.clearSearch",
+          "when": "view == search",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [

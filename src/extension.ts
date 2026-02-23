@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
-import { DatabaseProvider } from './providers/databaseProvider';
+import { SearchProvider } from './providers/searchProvider';
 import { FileService } from './services/fileService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 初始化数据提供器
     const pageTreeProvider = new PageTreeProvider(fileService, configService);
     const outlineProvider = new OutlineProvider(outlineService, configService);
-    const databaseProvider = new DatabaseProvider();
+    const searchProvider = new SearchProvider(fileService, configService);
 
     // 跟踪最后已知的文档 URI（用于预览模式）
     let lastKnownUri: vscode.Uri | undefined = undefined;
@@ -36,8 +36,8 @@ export function activate(context: vscode.ExtensionContext) {
         canSelectMany: false
     });
 
-    const databaseTreeView = vscode.window.createTreeView('database', {
-        treeDataProvider: databaseProvider,
+    const searchTreeView = vscode.window.createTreeView('search', {
+        treeDataProvider: searchProvider,
         showCollapseAll: false,
         canSelectMany: false
     });
@@ -115,10 +115,25 @@ export function activate(context: vscode.ExtensionContext) {
             commands.copyFile(item, fileService);
         }),
 
+        // 搜索命令
+        vscode.commands.registerCommand('knowledgeBase.searchNotes', async () => {
+            const query = await vscode.window.showInputBox({
+                prompt: '输入搜索关键词',
+                placeHolder: '支持单个关键词或多个关键词（空格分隔）',
+                value: searchProvider.getLastQuery()
+            });
+            if (query) {
+                await searchProvider.search(query);
+            }
+        }),
+        vscode.commands.registerCommand('knowledgeBase.clearSearch', () => {
+            searchProvider.clear();
+        }),
+
         // 注册视图
         pageTreeView,
         outlineTreeView,
-        databaseTreeView
+        searchTreeView
     );
 
     // 监听编辑器变化，更新大纲
