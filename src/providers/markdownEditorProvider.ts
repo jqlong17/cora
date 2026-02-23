@@ -37,13 +37,19 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
+            console.log('[Cora Custom Editor] Received message:', message);
             if (message.command === 'switchMode') {
+                console.log('[Cora Custom Editor] Switching mode to:', message.mode);
                 webviewPanel.webview.postMessage({ command: 'setMode', mode: message.mode });
             } else if (message.command === 'save') {
+                console.log('[Cora Custom Editor] Saving document');
                 await this.saveDocument(document, message.content);
             } else if (message.command === 'ready') {
-                // Webview is ready, ensure it's in preview mode
+                console.log('[Cora Custom Editor] Webview ready, setting preview mode');
                 webviewPanel.webview.postMessage({ command: 'setMode', mode: 'preview' });
+            } else if (message.command === 'log') {
+                // Log messages from webview
+                console.log('[Cora Webview]', message.data);
             }
         });
 
@@ -93,6 +99,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             <button class="mode-btn" id="previewBtn" onclick="switchMode('preview')">Preview</button>
             <button class="mode-btn" id="editBtn" onclick="switchMode('edit')">Markdown</button>
         </div>
+        <div id="debugMode" style="margin-left: 16px; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: white; background: #666;">Mode: initializing...</div>
     </div>
     <div class="content-area">
         <div class="view editor-view hidden" id="editorView">
@@ -259,24 +266,45 @@ textarea {
         return `
 const vscode = acquireVsCodeApi();
 
+// Debug logging helper
+function debugLog(...args) {
+    const msg = '[Cora Webview] ' + args.join(' ');
+    console.log(msg);
+    vscode.postMessage({ command: 'log', data: args.join(' ') });
+}
+
+debugLog('=== Webview Script Loading ===');
+
 // Always default to preview mode, ignore any persisted state
 const DEFAULT_MODE = 'preview';
 let currentMode = DEFAULT_MODE;
 
+debugLog('DEFAULT_MODE:', DEFAULT_MODE);
+debugLog('currentMode initialized to:', currentMode);
+
 document.getElementById('editor').value = ${escapedContent};
 
 function switchMode(mode) {
+    debugLog('switchMode called:', mode);
     currentMode = mode;
-    // Save current mode to state (for potential future use)
     vscode.setState({ mode: mode });
     updateUI(mode);
 }
 
 function updateUI(mode) {
+    debugLog('updateUI called with mode:', mode);
     document.getElementById('previewBtn').classList.toggle('active', mode === 'preview');
     document.getElementById('editBtn').classList.toggle('active', mode === 'edit');
     document.getElementById('editorView').classList.toggle('hidden', mode !== 'edit');
     document.getElementById('previewView').classList.toggle('hidden', mode !== 'preview');
+
+    // Update debug display
+    const debugEl = document.getElementById('debugMode');
+    if (debugEl) {
+        debugEl.textContent = 'Mode: ' + mode;
+        debugEl.style.background = mode === 'preview' ? '#4CAF50' : '#2196F3';
+    }
+
     if (mode === 'edit') {
         setTimeout(function() { document.getElementById('editor').focus(); }, 0);
     }
@@ -291,9 +319,9 @@ document.getElementById('editor').addEventListener('input', function(e) {
 });
 
 window.addEventListener('message', function(event) {
+    debugLog('Received message:', event.data.command);
     if (event.data.command === 'setMode') {
-        // Always override with preview mode on initial load
-        // The extension sends 'preview' to force this behavior
+        debugLog('Setting mode to:', event.data.mode);
         currentMode = event.data.mode;
         updateUI(event.data.mode);
     } else if (event.data.command === 'updateContent') {
@@ -302,10 +330,16 @@ window.addEventListener('message', function(event) {
 });
 
 // Initialize with default mode (preview)
+debugLog('Calling updateUI with DEFAULT_MODE:', DEFAULT_MODE);
 updateUI(DEFAULT_MODE);
 
 // Also notify extension that we're ready
+debugLog('Sending ready message to extension');
 vscode.postMessage({ command: 'ready' });
+
+// Log initial state of elements
+debugLog('editorView hidden class:', document.getElementById('editorView').classList.contains('hidden'));
+debugLog('previewView hidden class:', document.getElementById('previewView').classList.contains('hidden'));
 `;
     }
 
