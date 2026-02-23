@@ -304,15 +304,24 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
     return undefined;
 }
 
-// Helper function to open text editor directly (not preview)
+// Helper function to open markdown preview by default
 async function openTextEditor(uri: vscode.Uri): Promise<void> {
     try {
+        // Check if it's a markdown file
         const document = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(document, {
-            preview: false,
-            preserveFocus: false,
-            viewColumn: vscode.ViewColumn.One
-        });
+        const isMarkdown = document.languageId === 'markdown';
+
+        if (isMarkdown) {
+            // Open markdown preview for markdown files
+            await vscode.commands.executeCommand('markdown.showPreview', uri);
+        } else {
+            // Open text editor for non-markdown files
+            await vscode.window.showTextDocument(document, {
+                preview: false,
+                preserveFocus: false,
+                viewColumn: vscode.ViewColumn.One
+            });
+        }
     } catch (error) {
         vscode.window.showErrorMessage(`无法打开文件: ${error}`);
     }
