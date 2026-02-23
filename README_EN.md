@@ -6,14 +6,14 @@ A Notion-inspired knowledge management plugin for VS Code
 
 VS Code and Cursor's interfaces are designed for programming—file tree on the left, editor in the middle, AI chat on the right. This layout works well for coding, but it's not ideal for knowledge management.
 
-Notion excels at knowledge management: hierarchical pages, document outlines, database views. But it lacks VS Code's powerful editing capabilities and AI integration.
+Notion excels at knowledge management: hierarchical pages, document outlines, full-text search. But it lacks VS Code's powerful editing capabilities and AI integration.
 
 Cora combines both:
 
 - 📁 **Page Tree** — Intuitive hierarchical organization like Notion
-- 📋 **Outline View** — One-click navigation through document structure
-- 🗂️ **Database View** — Transform Markdown files into structured data
-- 📝 **Seamless Editing** — Switch back to VS Code's native editor anytime
+- 📋 **Outline View** — One-click navigation through document structure with collapsible headings
+- 🔍 **Full-text Search** — Multi-keyword search with intelligent fallback
+- 📝 **Seamless Editing** — Edit/preview toggle while keeping VS Code's native experience
 
 ## Who is it for?
 
@@ -26,7 +26,7 @@ Cora combines both:
 |----------|-----------------|----------|
 | Organizing project docs | Nested folder chaos | Hierarchical page tree at a glance |
 | Reading long documents | Scroll to find content | Outline navigation, jump to target section instantly |
-| Managing knowledge base | Plain text, hard to search | Database view with property filtering |
+| Finding notes | Open files one by one | Full-text search with keyword highlighting |
 | Switching coding/writing | Two apps back and forth | One VS Code, two modes |
 
 ## Core Design Philosophy
@@ -43,32 +43,100 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **File Tree View**: Display complete file hierarchy from workspace root
 - **Smart Filtering**: Toggle between [All Files] and [Markdown Only]
 - **Quick Actions**: New note, new folder, rename, delete
+- **File Operations**: Reveal in Finder, copy path, copy file
 - **Expand/Collapse**: Expand all, collapse all
 
 ### 📋 Outline
-- **Real-time Following**: Automatically follow the active editor
-- **Heading Levels**: Extract H1-H6 heading structure
+- **Real-time Following**: Automatically follow the active editor/preview
+- **Heading Levels**: Extract H1-H6 headings with collapsible structure
 - **Quick Jump**: Click outline item to jump to corresponding position
-- **Hierarchical Indentation**: Clearly show document structure levels
+- **Level Icons**: Different icons for different levels, clear visual hierarchy
 
-### 🗄️ Database
-- **MVP Placeholder**: Current version is a feature placeholder
-- **Future Features**: Table/kanban views, frontmatter property management, filtering and sorting
+### 🔍 Search
+- **Full-text Search**: Search content across all Markdown files in workspace
+- **Multi-keyword**: Support `A B` format to search files containing all keywords
+- **Smart Fallback**: When AND search has no results, automatically fallback to OR search
+- **Match Statistics**: Show match count and preview text for each file
+- **Result Sorting**: Automatically sort by match count
+
+### 📝 Edit and Preview
+- **Edit by Default**: Click file to open editor by default
+- **One-click Toggle**: Button in editor top-right to switch edit/preview mode
+- **Outline Sync**: Outline remains visible and functional in preview mode
 
 ## Quick Start
+
+### Installation
+
+1. Search for "Cora" in VS Code/Cursor extension marketplace
+2. Click Install
+3. After installation, the 📖 **Cora** icon appears in the left activity bar
+
+### Usage Guide
 
 1. **Open Cora Panel**
    - Click the 📖 Cora icon in the left activity bar
    - Or use shortcut `Cmd+Shift+P` and type "Cora"
 
-2. **Browse Files**
+2. **Browse Files (Page Tree)**
    - View workspace file tree in the [Pages] tab
    - Use top buttons to toggle [All/Markdown] filter mode
+   - Right-click files for various operations
 
-3. **Read/Edit Documents**
-   - Click Markdown file → Open editor
-   - Click the toggle button in editor top-right to enter preview
-   - View [Outline] tab for document structure, click to jump
+3. **View Document Structure (Outline)**
+   - Open any Markdown file
+   - Switch to [Outline] tab to view document heading structure
+   - Click heading items to jump to corresponding positions
+   - Support expand/collapse subheadings
+
+4. **Search Notes**
+   - Switch to [Search] tab
+   - Click 🔍 **Search Notes** button
+   - Enter keywords, support multi-keyword (space separated)
+   - View search results and click to open files
+
+5. **Edit and Preview**
+   - Click Markdown file → Opens editor by default
+   - Click 👁️ button in editor top-right to enter preview
+   - Click ✏️ button in preview mode to return to edit
+
+## Keyboard Shortcuts
+
+| Action | Shortcut |
+|--------|----------|
+| Open Markdown Preview | `Cmd+Shift+V` |
+| Return to Editor from Preview | `Cmd+E` |
+
+## Context Menu Features
+
+Right-click on files or folders in the page tree:
+
+- **New Note** - Create new Markdown file in current directory
+- **New Folder** - Create new folder in current directory
+- **Rename** - Rename file/folder
+- **Delete** - Delete file/folder
+- **Reveal in Finder** - Open system file manager
+- **Copy Absolute Path** - Copy full file path
+- **Copy Relative Path** - Copy path relative to workspace
+- **Copy File** - Create file copy (auto-named)
+
+## Search Tips
+
+| Input | Description | Result |
+|-------|-------------|--------|
+| `project` | Single keyword | All notes containing "project" |
+| `project plan` | Multi-keyword (AND) | Notes containing both "project" and "plan" |
+| `project plan` (no AND results) | Smart fallback (OR) | Notes containing "project" or "plan" |
+
+## Configuration
+
+Search for "knowledgeBase" in VS Code settings to configure:
+
+| Config | Type | Default | Description |
+|--------|------|---------|-------------|
+| `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode |
+| `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions |
+| `knowledgeBase.autoReveal` | boolean | `true` | Auto reveal current file in page tree |
 
 ## Languages
 
