@@ -29,7 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const outlineTreeView = vscode.window.createTreeView('kbOutline', {
         treeDataProvider: outlineProvider,
-        showCollapseAll: false,
+        showCollapseAll: true,
         canSelectMany: false
     });
 
