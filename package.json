@@ -73,6 +73,21 @@
         "contents": "搜索笔记内容\n支持：• 单个关键词：A • 多个关键词：A B\n[开始搜索](command:knowledgeBase.searchNotes)"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "cora.markdownEditor",
+        "displayName": "Cora Markdown Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          },
+          {
+            "filenamePattern": "*.markdown"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
         "command": "knowledgeBase.refreshPageTree",
@@ -137,16 +152,6 @@
       {
         "command": "knowledgeBase.gotoHeading",
         "title": "跳转到标题"
-      },
-      {
-        "command": "knowledgeBase.openPreview",
-        "title": "打开预览",
-        "icon": "$(open-preview)"
-      },
-      {
-        "command": "knowledgeBase.openEditor",
-        "title": "打开编辑",
-        "icon": "$(edit)"
       },
       {
         "command": "knowledgeBase.openTextEditor",

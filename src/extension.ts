@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
 import { SearchProvider } from './providers/searchProvider';
+import { MarkdownEditorProvider } from './providers/markdownEditorProvider';
 import { FileService } from './services/fileService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
@@ -45,6 +46,11 @@ export function activate(context: vscode.ExtensionContext) {
     // 存储视图引用到提供器中
     pageTreeProvider.setTreeView(pageTreeView);
     outlineProvider.setTreeView(outlineTreeView);
+
+    // 注册 Custom Markdown Editor
+    context.subscriptions.push(
+        MarkdownEditorProvider.register(context)
+    );
 
     // 注册命令
     context.subscriptions.push(
