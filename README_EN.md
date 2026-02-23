@@ -40,8 +40,9 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 ## Features
 
 ### 📄 Page Tree
-- **File Tree View**: Display complete file hierarchy from workspace root
-- **Smart Filtering**: Toggle between [All Files] and [Markdown Only]
+- **Flat/Tree Toggle**: By default, Markdown files are shown in a flat list sorted by modification time (newest first); you can switch to a folder hierarchy tree view
+- **File Tree View**: In tree mode, display complete file hierarchy from workspace root
+- **Smart Filtering**: In tree mode, toggle between [All Files] and [Markdown Only]
 - **Quick Actions**: New note, new folder, rename, delete
 - **File Operations**: Reveal in Finder, copy path, copy file
 - **Expand/Collapse**: Expand all, collapse all
@@ -81,8 +82,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
    - Or use shortcut `Cmd+Shift+P` and type "Cora"
 
 2. **Browse Files (Page Tree)**
-   - View workspace file tree in the [Pages] tab
-   - Use top buttons to toggle [All/Markdown] filter mode
+   - In the [Pages] tab, the default **flat** view lists all Markdown files sorted by modification time (newest first)
+   - Use the toolbar “Toggle flat/tree” to switch between flat and tree view; in tree view use [All/Markdown] filter
    - Right-click files for various operations
 
 3. **View Document Structure (Outline)**
@@ -136,7 +137,8 @@ Search for "knowledgeBase" in VS Code settings to configure:
 
 | Config | Type | Default | Description |
 |--------|------|---------|-------------|
-| `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode |
+| `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode (tree view) |
+| `knowledgeBase.pageViewMode` | string | `"flat"` | Page view mode: `flat` (by mtime) or `tree` (hierarchy) |
 | `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions |
 | `knowledgeBase.autoReveal` | boolean | `true` | Auto reveal current file in page tree |
 

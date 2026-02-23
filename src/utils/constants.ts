@@ -2,6 +2,7 @@ export const EXTENSION_NAME = 'knowledgeBase';
 
 export const CONFIG_KEYS = {
     FILTER_MODE: 'filterMode',
+    PAGE_VIEW_MODE: 'pageViewMode',
     MARKDOWN_EXTENSIONS: 'markdownExtensions',
     PREVIEW_ON_CLICK: 'previewOnClick',
     AUTO_REVEAL: 'autoReveal',
@@ -11,6 +12,7 @@ export const CONFIG_KEYS = {
 export const COMMANDS = {
     REFRESH_PAGE_TREE: `${EXTENSION_NAME}.refreshPageTree`,
     TOGGLE_FILTER: `${EXTENSION_NAME}.toggleFilter`,
+    TOGGLE_PAGE_VIEW: `${EXTENSION_NAME}.togglePageView`,
     SHOW_ALL_FILES: `${EXTENSION_NAME}.showAllFiles`,
     SHOW_MARKDOWN_ONLY: `${EXTENSION_NAME}.showMarkdownOnly`,
     OPEN_PREVIEW: `${EXTENSION_NAME}.openPreview`,
@@ -35,6 +37,8 @@ export const DEFAULT_MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx'];
 export const HEADING_REGEX = /^(#{1,6})\s+(.+)$/gm;
 
 export type FilterMode = 'all' | 'markdown';
+
+export type PageViewMode = 'flat' | 'tree';
 
 export interface Heading {
     level: number;

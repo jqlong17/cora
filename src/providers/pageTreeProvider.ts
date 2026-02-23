@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { FileService, FileItem } from '../services/fileService';
 import { ConfigService } from '../services/configService';
-import { getFileIcon } from '../utils/markdownParser';
 
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
         public readonly item: FileItem,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState
+        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        descriptionOverride?: string
     ) {
         super(item.name, collapsibleState);
 
@@ -25,12 +26,16 @@ export class PageTreeItem extends vscode.TreeItem {
             this.contextValue = 'folder';
         }
 
-        // Add description showing relative path for root folders
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 1) {
-            const folder = workspaceFolders.find(f => item.uri.fsPath.startsWith(f.uri.fsPath));
-            if (folder) {
-                this.description = folder.name;
+        // Add description showing relative path for root folders (or use override for flat view)
+        if (descriptionOverride !== undefined) {
+            this.description = descriptionOverride;
+        } else {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (workspaceFolders && workspaceFolders.length > 1) {
+                const folder = workspaceFolders.find(f => item.uri.fsPath.startsWith(f.uri.fsPath));
+                if (folder) {
+                    this.description = folder.name;
+                }
             }
         }
     }
@@ -60,18 +65,42 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     }
 
     async getChildren(element?: PageTreeItem): Promise<PageTreeItem[]> {
-        const items = await this.fileService.getChildren(element?.item);
+        const pageViewMode = this.configService.getPageViewMode();
 
+        if (pageViewMode === 'flat') {
+            if (element !== undefined) {
+                return [];
+            }
+            const items = await this.fileService.getAllMarkdownFilesSortedByMtime();
+            const folders = this.fileService.getWorkspaceFolders();
+            return items.map(item => {
+                let descriptionOverride: string | undefined;
+                if (folders.length >= 1) {
+                    const folder = folders.find(f => item.uri.fsPath.startsWith(f.uri.fsPath));
+                    if (folder) {
+                        const rel = path.relative(folder.uri.fsPath, item.uri.fsPath);
+                        if (rel !== item.name) {
+                            descriptionOverride = rel;
+                        }
+                    }
+                }
+                return new PageTreeItem(item, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+            });
+        }
+
+        const items = await this.fileService.getChildren(element?.item);
         return items.map(item => {
             const collapsibleState = item.type === 'directory'
                 ? vscode.TreeItemCollapsibleState.Collapsed
                 : vscode.TreeItemCollapsibleState.None;
-
             return new PageTreeItem(item, collapsibleState);
         });
     }
 
     async getParent(element: PageTreeItem): Promise<PageTreeItem | null> {
+        if (this.configService.getPageViewMode() === 'flat') {
+            return null;
+        }
         const parentPath = element.item.uri.fsPath.split('/').slice(0, -1).join('/');
         if (!parentPath) {
             return null;

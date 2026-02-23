@@ -1,4 +1,5 @@
 export * from './toggleFilter';
+export * from './togglePageView';
 export * from './fileOperations';
 export * from './editorCommands';
 export * from './navigationCommands';

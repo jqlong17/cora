@@ -87,6 +87,11 @@
         "icon": "$(filter)"
       },
       {
+        "command": "knowledgeBase.togglePageView",
+        "title": "切换平铺/树形",
+        "icon": "$(list-flat)"
+      },
+      {
         "command": "knowledgeBase.showAllFiles",
         "title": "显示全部文件",
         "icon": "$(files)"
@@ -191,6 +196,11 @@
           "group": "navigation@1"
         },
         {
+          "command": "knowledgeBase.togglePageView",
+          "when": "view == pageTree",
+          "group": "navigation@1"
+        },
+        {
           "command": "knowledgeBase.collapseAll",
           "when": "view == pageTree",
           "group": "navigation@2"
@@ -285,6 +295,19 @@
           ],
           "description": "页面树的文件过滤模式"
         },
+        "knowledgeBase.pageViewMode": {
+          "type": "string",
+          "default": "flat",
+          "enum": [
+            "flat",
+            "tree"
+          ],
+          "enumDescriptions": [
+            "平铺展示所有 Markdown 文件，按修改时间降序",
+            "按文件夹层级树形展示"
+          ],
+          "description": "页面展示模式"
+        },
         "knowledgeBase.markdownExtensions": {
           "type": "array",
           "default": [
@@ -332,7 +355,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "seed-test-workspace": "node scripts/seed-test-workspace.js"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FilterMode, CONFIG_KEYS, DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
+import { FilterMode, PageViewMode, CONFIG_KEYS, DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
 
 export class ConfigService {
     private config: vscode.WorkspaceConfiguration;
@@ -18,6 +18,14 @@ export class ConfigService {
 
     async setFilterMode(mode: FilterMode): Promise<void> {
         await this.config.update(CONFIG_KEYS.FILTER_MODE, mode, true);
+    }
+
+    getPageViewMode(): PageViewMode {
+        return this.config.get<PageViewMode>(CONFIG_KEYS.PAGE_VIEW_MODE, 'flat');
+    }
+
+    async setPageViewMode(mode: PageViewMode): Promise<void> {
+        await this.config.update(CONFIG_KEYS.PAGE_VIEW_MODE, mode, true);
     }
 
     getMarkdownExtensions(): string[] {

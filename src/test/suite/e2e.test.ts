@@ -91,6 +91,53 @@ suite('Cora E2E Test Suite', () => {
             fs.writeFileSync(filePath, file.content, 'utf8');
         }
 
+        // 构造体现平铺模式优势的文档树：多层文件夹 + 不同修改时间，平铺时按 mtime 降序便于找「最近改过的」
+        const docsDir = path.join(testWorkspacePath, 'docs');
+        const notes2024Dir = path.join(testWorkspacePath, 'notes', '2024');
+        fs.mkdirSync(docsDir, { recursive: true });
+        fs.mkdirSync(notes2024Dir, { recursive: true });
+
+        const nestedFiles: { path: string; content: string; mtimeOffsetMs: number }[] = [
+            {
+                path: path.join(docsDir, '需求文档.md'),
+                content: '# 需求文档\n\n## 功能列表\n- 用户登录\n- 数据导出\n',
+                mtimeOffsetMs: -2 * 24 * 60 * 60 * 1000
+            },
+            {
+                path: path.join(docsDir, '设计文档.md'),
+                content: '# 设计文档\n\n## 架构\n- 前端 React\n- 后端 Node\n',
+                mtimeOffsetMs: -1 * 24 * 60 * 60 * 1000
+            },
+            {
+                path: path.join(notes2024Dir, '周报-01.md'),
+                content: '# 周报 第1周\n\n## 完成项\n- 需求评审\n',
+                mtimeOffsetMs: -12 * 60 * 60 * 1000
+            },
+            {
+                path: path.join(notes2024Dir, '周报-02.md'),
+                content: '# 周报 第2周\n\n## 完成项\n- 接口设计\n- 数据库表设计\n',
+                mtimeOffsetMs: 0
+            }
+        ];
+        const baseTime = Date.now();
+        for (const f of nestedFiles) {
+            fs.writeFileSync(f.path, f.content, 'utf8');
+            const mtime = new Date(baseTime + f.mtimeOffsetMs);
+            fs.utimesSync(f.path, mtime, mtime);
+        }
+
+        // 为根目录三个文件设置更早的 mtime，使平铺时排在后面
+        const rootFilesWithMtime = [
+            { name: '读书笔记.md', offsetMs: -7 * 24 * 60 * 60 * 1000 },
+            { name: '会议纪要.md', offsetMs: -5 * 24 * 60 * 60 * 1000 },
+            { name: '项目计划.md', offsetMs: -3 * 24 * 60 * 60 * 1000 }
+        ];
+        for (const r of rootFilesWithMtime) {
+            const p = path.join(testWorkspacePath, r.name);
+            const t = new Date(baseTime + r.offsetMs);
+            fs.utimesSync(p, t, t);
+        }
+
         // 初始化服务
         configService = new ConfigService();
         fileService = new FileService(configService);
@@ -199,6 +246,27 @@ suite('Cora E2E Test Suite', () => {
                 const treeItem = pageTreeProvider.getTreeItem(children[0]);
                 assert.ok(treeItem, 'Should return tree item');
                 assert.ok(treeItem.label, 'Tree item should have label');
+            }
+        });
+
+        test('flat view: root children sorted by mtime desc, most recent first', async function() {
+            if (!vscode.workspace.workspaceFolders?.length) {
+                this.skip();
+                return;
+            }
+            await configService.setPageViewMode('flat');
+            pageTreeProvider.refresh();
+            const children = await pageTreeProvider.getChildren();
+            await configService.setPageViewMode('tree');
+            pageTreeProvider.refresh();
+            assert.ok(Array.isArray(children), 'Flat view should return array');
+            assert.ok(children.length >= 1, 'Flat view should list at least one MD file');
+            const first = pageTreeProvider.getTreeItem(children[0]);
+            assert.ok(first?.label, 'First item should have label');
+            const isTestWorkspace = vscode.workspace.workspaceFolders?.length === 1 &&
+                vscode.workspace.workspaceFolders[0].uri.fsPath === testWorkspacePath;
+            if (isTestWorkspace && children.length >= 7) {
+                assert.strictEqual(first.label, '周报-02.md', 'In test workspace, first in flat view should be most recent (周报-02.md)');
             }
         });
     });

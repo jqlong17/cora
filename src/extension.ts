@@ -55,6 +55,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('knowledgeBase.toggleFilter', () => {
             commands.toggleFilter(configService, pageTreeProvider);
         }),
+        vscode.commands.registerCommand('knowledgeBase.togglePageView', () => {
+            commands.togglePageView(configService, pageTreeProvider);
+        }),
         vscode.commands.registerCommand('knowledgeBase.showAllFiles', () => {
             commands.setFilterMode('all', configService, pageTreeProvider);
         }),

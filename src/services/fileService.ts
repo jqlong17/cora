@@ -90,6 +90,60 @@ export class FileService {
         }
     }
 
+    /**
+     * 递归收集所有 Markdown 文件，按修改时间降序排列（平铺视图用）。
+     */
+    async getAllMarkdownFilesSortedByMtime(): Promise<FileItem[]> {
+        const folders = this.getWorkspaceFolders();
+        if (folders.length === 0) {
+            return [];
+        }
+        const markdownExtensions = this.configService.getMarkdownExtensions();
+        const collected: { uri: vscode.Uri; name: string; mtime: number }[] = [];
+
+        const collectFromDir = async (dirPath: string): Promise<void> => {
+            try {
+                const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    if (entry.name.startsWith('.')) {
+                        continue;
+                    }
+                    if (entry.name === 'node_modules' || entry.name === 'out' || entry.name === 'dist') {
+                        continue;
+                    }
+                    if (entry.isDirectory()) {
+                        await collectFromDir(fullPath);
+                    } else if (entry.isFile() && isMarkdownFile(entry.name, markdownExtensions)) {
+                        try {
+                            const stat = await fs.promises.stat(fullPath);
+                            collected.push({
+                                uri: vscode.Uri.file(fullPath),
+                                name: entry.name,
+                                mtime: stat.mtimeMs
+                            });
+                        } catch {
+                            // skip unreadable files
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error reading directory in flat view:', error);
+            }
+        };
+
+        for (const folder of folders) {
+            await collectFromDir(folder.uri.fsPath);
+        }
+
+        collected.sort((a, b) => b.mtime - a.mtime);
+        return collected.map(({ uri, name }) => ({
+            uri,
+            type: 'file' as const,
+            name
+        }));
+    }
+
     async createFile(parentUri: vscode.Uri, fileName: string): Promise<vscode.Uri | null> {
         const filePath = path.join(parentUri.fsPath, fileName);
         try {
