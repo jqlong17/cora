@@ -1,0 +1,13 @@
+{
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "search.exclude": {
+    "out": true,
+    "dist": true,
+    "node_modules": true
+  },
+  "files.exclude": {
+    "out": false,
+    "dist": false
+  }
+}
