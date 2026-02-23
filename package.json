@@ -347,16 +347,20 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.96.0",
-    "@types/node": "20.x",
-    "@types/mocha": "^10.0.6",
     "@types/glob": "^8.1.0",
-    "typescript": "^5.5.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.96.0",
     "@typescript-eslint/eslint-plugin": "^7.14.0",
     "@typescript-eslint/parser": "^7.14.0",
+    "@vscode/test-electron": "^2.3.9",
     "eslint": "^8.57.0",
-    "mocha": "^10.3.0",
     "glob": "^10.3.10",
-    "@vscode/test-electron": "^2.3.9"
+    "mocha": "^10.3.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@types/marked": "^5.0.2",
+    "marked": "^17.0.3"
   }
 }
