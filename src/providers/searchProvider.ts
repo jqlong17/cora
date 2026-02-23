@@ -64,14 +64,16 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchTreeItem> {
         const items: SearchTreeItem[] = [];
 
         // 创建搜索输入项
+        const inputLabel = this.lastQuery || '点击输入搜索关键词...';
         const inputItem = new vscode.TreeItem(
-            this.lastQuery || '🔍 点击输入搜索关键词...',
+            inputLabel,
             vscode.TreeItemCollapsibleState.None
         );
         inputItem.tooltip = this.lastQuery
             ? `当前搜索: "${this.lastQuery}"\n点击进行新搜索`
             : '点击输入搜索关键词\n支持：单个关键词 或 多个关键词（空格分隔）';
         inputItem.description = this.lastQuery ? '点击修改搜索词' : '';
+        // 使用 search 图标，不添加额外的 emoji
         inputItem.iconPath = new vscode.ThemeIcon('search');
         inputItem.command = {
             command: 'knowledgeBase.searchNotes',
@@ -92,7 +94,7 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchTreeItem> {
 
         // 添加清除结果项
         const clearItem = new vscode.TreeItem(
-            '🗑️ 清除搜索结果',
+            '清除搜索结果',
             vscode.TreeItemCollapsibleState.None
         );
         clearItem.tooltip = '清除当前搜索结果';
