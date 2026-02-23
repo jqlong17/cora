@@ -107,6 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 监听编辑器变化，更新大纲
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => {
+            console.log('Active text editor changed:', editor ? editor.document.fileName : 'undefined');
             if (editor) {
                 outlineProvider.updateForEditor(editor);
             } else {
@@ -126,11 +127,23 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         // 监听标签页变化（支持预览模式）
         vscode.window.tabGroups.onDidChangeTabs((e) => {
+            console.log('Tabs changed, open tabs:', e.opened.length, 'closed tabs:', e.closed.length);
             const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
             if (activeTab) {
                 const uri = getUriFromTab(activeTab);
                 if (uri) {
-                    // Check if it's a markdown file
+                    console.log('Active tab URI:', uri.toString());
+                    outlineProvider.updateForUri(uri);
+                }
+            }
+        }),
+        // 监听活动标签组变化
+        vscode.window.onDidChangeActiveColorTheme(() => {
+            // Theme change might indicate view change, refresh outline
+            const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+            if (activeTab) {
+                const uri = getUriFromTab(activeTab);
+                if (uri) {
                     outlineProvider.updateForUri(uri);
                 }
             }
@@ -161,6 +174,21 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // 监听窗口焦点变化，用于更新预览模式下的大纲
+    context.subscriptions.push(
+        vscode.window.onDidChangeWindowState((e) => {
+            if (e.focused) {
+                const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+                if (activeTab) {
+                    const uri = getUriFromTab(activeTab);
+                    if (uri) {
+                        outlineProvider.updateForUri(uri);
+                    }
+                }
+            }
+        })
+    );
+
     // 初始化当前编辑器的大纲
     if (vscode.window.activeTextEditor) {
         outlineProvider.updateForEditor(vscode.window.activeTextEditor);
@@ -187,26 +215,43 @@ export function deactivate() {
 // Helper function to extract URI from a tab
 function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
     const input = tab.input as any;
+    console.log('Tab input:', JSON.stringify(input, null, 2));
+
     if (!input) {
+        console.log('No tab input found');
         return undefined;
     }
 
     // Handle different tab input types
     if (input.uri) {
+        console.log('Found URI in input.uri:', input.uri);
         return typeof input.uri === 'string' ? vscode.Uri.file(input.uri) : input.uri;
     }
 
     // For markdown preview and other custom editors
-    if (input.viewType === 'markdown.preview' && input.resource) {
-        return typeof input.resource === 'string' ? vscode.Uri.file(input.resource) : input.resource;
+    // Try multiple possible view types for markdown preview
+    const previewViewTypes = ['markdown.preview', 'vscode.markdown.preview', 'default.markdown.preview'];
+    if (previewViewTypes.includes(input.viewType)) {
+        if (input.resource) {
+            console.log('Found preview resource:', input.resource);
+            return typeof input.resource === 'string' ? vscode.Uri.file(input.resource) : input.resource;
+        }
     }
 
     // Try common properties
-    const possibleUri = input.resource || input.path || input.document;
+    const possibleUri = input.resource || input.path || input.document || input.fileName || input.fsPath;
     if (possibleUri) {
+        console.log('Found URI in common property:', possibleUri);
         return typeof possibleUri === 'string' ? vscode.Uri.file(possibleUri) : possibleUri;
     }
 
+    // For webview-based previews, try to extract from webview options
+    if (input.webviewOptions?.path) {
+        console.log('Found URI in webviewOptions:', input.webviewOptions.path);
+        return vscode.Uri.file(input.webviewOptions.path);
+    }
+
+    console.log('Could not extract URI from tab input');
     return undefined;
 }
 
