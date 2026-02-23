@@ -231,29 +231,34 @@
       ],
       "view/item/context": [
         {
+          "command": "knowledgeBase.clearSearch",
+          "when": "view == search",
+          "group": "1_search@1"
+        },
+        {
           "command": "knowledgeBase.newNote",
           "when": "view == pageTree && viewItem == folder",
-          "group": "1_new@1"
+          "group": "2_new@1"
         },
         {
           "command": "knowledgeBase.newFolder",
           "when": "view == pageTree && viewItem == folder",
-          "group": "1_new@2"
+          "group": "2_new@2"
         },
         {
           "command": "knowledgeBase.renameItem",
           "when": "view == pageTree",
-          "group": "2_edit@1"
+          "group": "3_edit@1"
         },
         {
           "command": "knowledgeBase.deleteItem",
           "when": "view == pageTree",
-          "group": "2_edit@2"
+          "group": "3_edit@2"
         },
         {
           "command": "knowledgeBase.revealInFinder",
           "when": "view == pageTree",
-          "group": "3_file@1"
+          "group": "4_file@1"
         },
         {
           "command": "knowledgeBase.copyPath",

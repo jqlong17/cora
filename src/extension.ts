@@ -128,6 +128,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('knowledgeBase.clearSearch', () => {
             searchProvider.clear();
+            vscode.window.showInformationMessage('搜索结果已清空');
         }),
 
         // 注册视图
