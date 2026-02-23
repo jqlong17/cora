@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
 import { SearchProvider } from './providers/searchProvider';
-import { PreviewProvider } from './providers/previewProvider';
 import { FileService } from './services/fileService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
@@ -20,7 +19,6 @@ export function activate(context: vscode.ExtensionContext) {
     const pageTreeProvider = new PageTreeProvider(fileService, configService);
     const outlineProvider = new OutlineProvider(outlineService, configService);
     const searchProvider = new SearchProvider(fileService, configService);
-    const previewProvider = new PreviewProvider(context);
 
     // 跟踪最后已知的文档 URI（用于预览模式）
     let lastKnownUri: vscode.Uri | undefined = undefined;
@@ -86,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // 编辑和预览命令
         vscode.commands.registerCommand('knowledgeBase.openPreview', (uri) => {
-            previewProvider.openPreview(uri);
+            commands.openPreview(uri);
         }),
         vscode.commands.registerCommand('knowledgeBase.openEditor', (uri) => {
             commands.openEditor(uri);
@@ -95,7 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
             commands.togglePreviewEditor();
         }),
         vscode.commands.registerCommand('knowledgeBase.openTextEditor', (uri) => {
-            openTextEditor(uri, previewProvider);
+            openTextEditor(uri);
         }),
 
         // 大纲命令
@@ -306,16 +304,17 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
     return undefined;
 }
 
-// Helper function to open markdown preview by default (using custom webview)
-async function openTextEditor(uri: vscode.Uri, previewProvider: PreviewProvider): Promise<void> {
+// Helper function to open markdown preview by default (using VS Code native preview)
+async function openTextEditor(uri: vscode.Uri): Promise<void> {
     try {
         // Check if it's a markdown file
         const document = await vscode.workspace.openTextDocument(uri);
         const isMarkdown = document.languageId === 'markdown';
 
         if (isMarkdown) {
-            // Open custom webview preview for markdown files
-            await previewProvider.openPreview(uri);
+            // Open VS Code native markdown preview for markdown files
+            // This opens the preview with Preview/Markdown toggle buttons
+            await vscode.commands.executeCommand('markdown.showPreview', uri);
         } else {
             // Open text editor for non-markdown files
             await vscode.window.showTextDocument(document, {
