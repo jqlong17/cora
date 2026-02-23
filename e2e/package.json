@@ -1,0 +1,16 @@
+{
+  "name": "cora-e2e-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for Cora using Playwright",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "install": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.0",
+    "@types/node": "^20.10.0"
+  }
+}
