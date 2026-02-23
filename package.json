@@ -27,7 +27,8 @@
     "cora"
   ],
   "activationEvents": [
-    "onView:pageTree"
+    "onView:pageTree",
+    "onCustomEditor:cora.markdownEditor"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -85,7 +86,7 @@
             "filenamePattern": "*.markdown"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "commands": [

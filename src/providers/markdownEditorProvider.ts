@@ -1,6 +1,15 @@
 import * as vscode from 'vscode';
 import { marked } from 'marked';
 
+function getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+
 export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     public static readonly viewType = 'cora.markdownEditor';
 
@@ -25,43 +34,50 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
-        webviewPanel.webview.options = { enableScripts: true };
-
-        this.setInitialHtml(document, webviewPanel);
+        webviewPanel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+            ],
+        };
 
         const changeSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
-                const content = e.document.getText();
-                webviewPanel.webview.postMessage({ command: 'updateContent', content });
+                webviewPanel.webview.postMessage({
+                    command: 'updateContent',
+                    content: e.document.getText(),
+                });
             }
         });
 
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
-            console.log('[Cora Custom Editor] Received message:', message);
             if (message.command === 'switchMode') {
-                console.log('[Cora Custom Editor] Switching mode to:', message.mode);
                 webviewPanel.webview.postMessage({ command: 'setMode', mode: message.mode });
             } else if (message.command === 'save') {
-                console.log('[Cora Custom Editor] Saving document');
                 await this.saveDocument(document, message.content);
             } else if (message.command === 'ready') {
-                console.log('[Cora Custom Editor] Webview ready, setting preview mode');
-                webviewPanel.webview.postMessage({ command: 'setMode', mode: 'preview' });
-            } else if (message.command === 'log') {
-                // Log messages from webview
-                console.log('[Cora Webview]', message.data);
+                webviewPanel.webview.postMessage({
+                    command: 'init',
+                    content: document.getText(),
+                    mode: 'preview',
+                });
             }
         });
 
         webviewPanel.onDidDispose(() => {
             changeSubscription.dispose();
         });
+
+        this.setInitialHtml(document, webviewPanel);
     }
 
     private setInitialHtml(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
         const content = document.getText();
-        panel.webview.html = this.getHtml(content);
-        // The webview will send 'ready' message when loaded, then we set preview mode
+        const nonce = getNonce();
+        const scriptUri = panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'media', 'editor.js')
+        );
+        panel.webview.html = this.getHtml(content, scriptUri, nonce);
     }
 
     private async saveDocument(document: vscode.TextDocument, content: string): Promise<void> {
@@ -75,30 +91,26 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         await document.save();
     }
 
-    private getHtml(content: string): string {
+    private getHtml(content: string, scriptUri: vscode.Uri, nonce: string): string {
         marked.setOptions({ gfm: true, breaks: true });
         const htmlContent = marked.parse(content);
-        const escapedContent = JSON.stringify(content);
-
-        const css = this.getCSS();
-        const js = this.getJS(escapedContent);
 
         return `<!DOCTYPE html>
-<html lang="zh-CN" data-initial-mode="preview">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
     <title>Markdown Editor</title>
-    <style>${css}</style>
+    <style>${this.getCSS()}</style>
 </head>
 <body>
     <div class="toolbar">
         <div class="mode-toggle">
-            <button class="mode-btn" id="previewBtn">Preview</button>
+            <button class="mode-btn active" id="previewBtn">Preview</button>
             <button class="mode-btn" id="editBtn">Markdown</button>
         </div>
-        <div id="debugMode" style="margin-left: 16px; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: white; background: #666;">Mode: initializing...</div>
+        <div id="debugBar" style="margin-left:12px; padding:2px 8px; font-size:11px; color:#999; font-family:monospace;"></div>
     </div>
     <div class="content-area">
         <div class="view editor-view hidden" id="editorView">
@@ -108,7 +120,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             <div class="preview-content" id="previewContent">${htmlContent}</div>
         </div>
     </div>
-    <script>${js}</script>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
     }
@@ -258,97 +270,6 @@ textarea {
     border: 1px solid var(--vscode-panel-border);
 }
 .preview-content img { max-width: 100%; }
-`;
-    }
-
-    private getJS(escapedContent: string): string {
-        return `
-(function() {
-    const vscode = acquireVsCodeApi();
-
-    // Debug logging helper
-    function debugLog(...args) {
-        const msg = '[Cora Webview] ' + args.join(' ');
-        console.log(msg);
-        vscode.postMessage({ command: 'log', data: args.join(' ') });
-    }
-
-    debugLog('=== Webview Script Loading ===');
-
-    // Always default to preview mode, ignore any persisted state
-    const DEFAULT_MODE = 'preview';
-    let currentMode = DEFAULT_MODE;
-
-    debugLog('DEFAULT_MODE:', DEFAULT_MODE);
-    debugLog('currentMode initialized to:', currentMode);
-
-    document.getElementById('editor').value = ${escapedContent};
-
-    function switchMode(mode) {
-        debugLog('switchMode called:', mode);
-        currentMode = mode;
-        vscode.setState({ mode: mode });
-        updateUI(mode);
-    }
-
-    function updateUI(mode) {
-        debugLog('updateUI called with mode:', mode);
-        document.getElementById('previewBtn').classList.toggle('active', mode === 'preview');
-        document.getElementById('editBtn').classList.toggle('active', mode === 'edit');
-        document.getElementById('editorView').classList.toggle('hidden', mode !== 'edit');
-        document.getElementById('previewView').classList.toggle('hidden', mode !== 'preview');
-
-        // Update debug display
-        const debugEl = document.getElementById('debugMode');
-        if (debugEl) {
-            debugEl.textContent = 'Mode: ' + mode;
-            debugEl.style.background = mode === 'preview' ? '#4CAF50' : '#2196F3';
-        }
-
-        if (mode === 'edit') {
-            setTimeout(function() { document.getElementById('editor').focus(); }, 0);
-        }
-    }
-
-    // Set up button click handlers
-    document.getElementById('previewBtn').addEventListener('click', function() {
-        switchMode('preview');
-    });
-    document.getElementById('editBtn').addEventListener('click', function() {
-        switchMode('edit');
-    });
-
-    let timeout;
-    document.getElementById('editor').addEventListener('input', function(e) {
-        clearTimeout(timeout);
-        timeout = setTimeout(function() {
-            vscode.postMessage({ command: 'save', content: e.target.value });
-        }, 500);
-    });
-
-    window.addEventListener('message', function(event) {
-        debugLog('Received message:', event.data.command);
-        if (event.data.command === 'setMode') {
-            debugLog('Setting mode to:', event.data.mode);
-            currentMode = event.data.mode;
-            updateUI(event.data.mode);
-        } else if (event.data.command === 'updateContent') {
-            document.getElementById('editor').value = event.data.content;
-        }
-    });
-
-    // Initialize with default mode (preview)
-    debugLog('Calling updateUI with DEFAULT_MODE:', DEFAULT_MODE);
-    updateUI(DEFAULT_MODE);
-
-    // Also notify extension that we're ready
-    debugLog('Sending ready message to extension');
-    vscode.postMessage({ command: 'ready' });
-
-    // Log initial state of elements
-    debugLog('editorView hidden class:', document.getElementById('editorView').classList.contains('hidden'));
-    debugLog('previewView hidden class:', document.getElementById('previewView').classList.contains('hidden'));
-})();
 `;
     }
 

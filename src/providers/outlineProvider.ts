@@ -11,7 +11,7 @@ export class OutlineItem extends vscode.TreeItem {
     ) {
         super(
             heading.text,
-            hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+            hasChildren ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
         );
 
         this.tooltip = `H${heading.level}: ${heading.text}`;
@@ -21,21 +21,16 @@ export class OutlineItem extends vscode.TreeItem {
             arguments: [heading.line]
         };
 
-        // Set icon based on heading level (using different icons for visual hierarchy)
         const iconMap: Record<number, string> = {
-            1: 'symbol-key',      // H1 - key symbol
-            2: 'symbol-enum',     // H2 - enum symbol
-            3: 'symbol-field',    // H3 - field symbol
-            4: 'symbol-variable', // H4 - variable symbol
-            5: 'symbol-constant', // H5 - constant symbol
-            6: 'symbol-property'  // H6 - property symbol
+            1: 'symbol-key',
+            2: 'symbol-enum',
+            3: 'symbol-field',
+            4: 'symbol-variable',
+            5: 'symbol-constant',
+            6: 'symbol-property'
         };
         this.iconPath = new vscode.ThemeIcon(iconMap[heading.level] || 'symbol-string');
-
-        // Set context value for styling
         this.contextValue = `heading-${heading.level}`;
-
-        // Use description to show level indicator instead of inline text
         this.description = `H${heading.level}`;
     }
 }
@@ -68,8 +63,7 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
     }
 
     async updateForEditor(editor: vscode.TextEditor): Promise<void> {
-        const document = editor.document;
-        await this.updateForDocument(document, editor);
+        await this.updateForDocument(editor.document, editor);
     }
 
     async updateForUri(uri: vscode.Uri): Promise<void> {
@@ -84,8 +78,6 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
 
     private async updateForDocument(document: vscode.TextDocument, editor?: vscode.TextEditor): Promise<void> {
         const markdownExtensions = this.configService.getMarkdownExtensions();
-
-        // Check if we should show outline for this file
         const isMarkdown = isMarkdownFile(document.fileName, markdownExtensions);
         const showNonMarkdown = this.configService.getShowOutlineForNonMarkdown();
 
@@ -97,28 +89,6 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
         this.currentEditor = editor;
         this.currentHeadings = await this.outlineService.getHeadings(document);
         this.refresh();
-
-        // Highlight current section based on cursor position
-        if (editor) {
-            this.highlightCurrentHeading(editor);
-        }
-    }
-
-    private highlightCurrentHeading(editor: vscode.TextEditor): void {
-        const cursorLine = editor.selection.active.line;
-
-        // Find the current heading (the last heading before cursor)
-        let currentHeading: Heading | null = null;
-        for (const heading of this.currentHeadings) {
-            if (heading.line <= cursorLine) {
-                currentHeading = heading;
-            } else {
-                break;
-            }
-        }
-
-        // Note: VS Code TreeView doesn't have a built-in way to highlight items
-        // We could implement this with reveal() if we track the item reference
     }
 
     getTreeItem(element: OutlineItem): vscode.TreeItem {
@@ -130,45 +100,49 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
             return [];
         }
 
-        // Helper function to check if a heading has children
-        const hasChildren = (heading: Heading): boolean => {
-            const index = this.currentHeadings.findIndex(h => h.line === heading.line);
-            if (index === -1 || index >= this.currentHeadings.length - 1) {
-                return false;
-            }
-            return this.currentHeadings[index + 1].level > heading.level;
+        const parentMap = this.buildParentMap();
+
+        const hasChildrenAt = (idx: number): boolean => {
+            return parentMap.some(p => p === idx);
         };
 
-        // Build hierarchical structure based on heading levels
         if (!element) {
-            // Return all headings that don't have a parent at a higher level
-            // (i.e., H1 always shown, H2 only if no H1 before it, etc.)
-            // Actually, let's show all headings as a flat list but with proper visual hierarchy
-            return this.currentHeadings.map(h => new OutlineItem(h, hasChildren(h)));
-        } else {
-            // Return children of the current element
-            const parentIndex = this.currentHeadings.findIndex(h =>
-                h.line === element.heading.line && h.text === element.heading.text
-            );
-
-            if (parentIndex === -1) {
-                return [];
-            }
-
-            const children: OutlineItem[] = [];
-            const parentLevel = element.heading.level;
-
-            for (let i = parentIndex + 1; i < this.currentHeadings.length; i++) {
-                const heading = this.currentHeadings[i];
-                if (heading.level === parentLevel + 1) {
-                    children.push(new OutlineItem(heading, hasChildren(heading)));
-                } else if (heading.level <= parentLevel) {
-                    break;
-                }
-            }
-
-            return children;
+            return this.currentHeadings
+                .map((h, i) => ({ heading: h, index: i }))
+                .filter(({ index }) => parentMap[index] === -1)
+                .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index)));
         }
+
+        const parentIdx = this.currentHeadings.findIndex(h =>
+            h.line === element.heading.line && h.text === element.heading.text
+        );
+        if (parentIdx === -1) {
+            return [];
+        }
+
+        return this.currentHeadings
+            .map((h, i) => ({ heading: h, index: i }))
+            .filter(({ index }) => parentMap[index] === parentIdx)
+            .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index)));
+    }
+
+    /**
+     * Build a parent index map using a stack.
+     * parentMap[i] = index of the nearest preceding heading with a strictly lower level, or -1 if none.
+     */
+    private buildParentMap(): number[] {
+        const parentMap: number[] = [];
+        const stack: number[] = [];
+
+        for (let i = 0; i < this.currentHeadings.length; i++) {
+            while (stack.length > 0 && this.currentHeadings[stack[stack.length - 1]].level >= this.currentHeadings[i].level) {
+                stack.pop();
+            }
+            parentMap[i] = stack.length > 0 ? stack[stack.length - 1] : -1;
+            stack.push(i);
+        }
+
+        return parentMap;
     }
 
     getCurrentEditor(): vscode.TextEditor | undefined {

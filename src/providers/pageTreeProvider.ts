@@ -15,13 +15,10 @@ export class PageTreeItem extends vscode.TreeItem {
 
         if (item.type === 'file') {
             this.iconPath = new vscode.ThemeIcon('file');
-            // Use vscode.open to let VS Code choose the appropriate editor
-            // This will use our Custom Editor for markdown files
-            this.command = {
-                command: 'vscode.open',
-                title: '打开文件',
-                arguments: [item.uri]
-            };
+            const isMarkdown = /\.(md|markdown)$/i.test(item.name);
+            this.command = isMarkdown
+                ? { command: 'vscode.openWith', title: '打开文件', arguments: [item.uri, 'vscode.markdown.preview.editor'] }
+                : { command: 'vscode.open', title: '打开文件', arguments: [item.uri] };
             this.contextValue = 'file';
        } else {
             this.iconPath = new vscode.ThemeIcon('folder');
