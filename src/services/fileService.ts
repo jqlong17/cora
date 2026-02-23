@@ -157,4 +157,15 @@ export class FileService {
             return '';
         }
     }
+
+    async createFileWithContent(parentUri: vscode.Uri, fileName: string, content: string): Promise<vscode.Uri | null> {
+        const filePath = path.join(parentUri.fsPath, fileName);
+        try {
+            await fs.promises.writeFile(filePath, content, 'utf8');
+            return vscode.Uri.file(filePath);
+        } catch (error) {
+            console.error('Error creating file:', error);
+            return null;
+        }
+    }
 }

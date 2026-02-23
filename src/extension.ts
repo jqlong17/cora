@@ -101,6 +101,20 @@ export function activate(context: vscode.ExtensionContext) {
             commands.gotoHeading(line);
         }),
 
+        // 右键菜单命令
+        vscode.commands.registerCommand('knowledgeBase.revealInFinder', (item) => {
+            commands.revealInFinder(item);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.copyPath', (item) => {
+            commands.copyPath(item);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.copyRelativePath', (item) => {
+            commands.copyRelativePath(item);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.copyFile', (item) => {
+            commands.copyFile(item, fileService);
+        }),
+
         // 注册视图
         pageTreeView,
         outlineTreeView,

@@ -147,6 +147,26 @@
       {
         "command": "knowledgeBase.openTextEditor",
         "title": "打开编辑器"
+      },
+      {
+        "command": "knowledgeBase.revealInFinder",
+        "title": "在 Finder 中打开",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "knowledgeBase.copyPath",
+        "title": "复制绝对路径",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "knowledgeBase.copyRelativePath",
+        "title": "复制相对路径",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "knowledgeBase.copyFile",
+        "title": "复制文件",
+        "icon": "$(files)"
       }
     ],
     "menus": {
@@ -209,6 +229,26 @@
           "command": "knowledgeBase.deleteItem",
           "when": "view == pageTree",
           "group": "2_edit@2"
+        },
+        {
+          "command": "knowledgeBase.revealInFinder",
+          "when": "view == pageTree",
+          "group": "3_file@1"
+        },
+        {
+          "command": "knowledgeBase.copyPath",
+          "when": "view == pageTree",
+          "group": "3_file@2"
+        },
+        {
+          "command": "knowledgeBase.copyRelativePath",
+          "when": "view == pageTree",
+          "group": "3_file@3"
+        },
+        {
+          "command": "knowledgeBase.copyFile",
+          "when": "view == pageTree",
+          "group": "3_file@4"
         }
       ]
     },
