@@ -22,8 +22,10 @@ export class SearchItem extends vscode.TreeItem {
         this.description = `${result.matchCount} 处匹配`;
         this.iconPath = new vscode.ThemeIcon('file');
 
+        // Use vscode.open to let VS Code choose the appropriate editor
+        // This will use our Custom Editor for markdown files
         this.command = {
-            command: 'knowledgeBase.openEditor',
+            command: 'vscode.open',
             title: '打开文件',
             arguments: [result.uri]
         };
