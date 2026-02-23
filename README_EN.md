@@ -48,8 +48,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 ### 📋 Outline
 - **Real-time Following**: Automatically follow the active editor/preview
-- **Heading Levels**: Extract H1-H6 headings with collapsible structure
-- **Quick Jump**: Click outline item to jump to corresponding position
+- **Tree Hierarchy**: H1→H2→H3 auto-builds parent-child relationships, expanded by default
+- **Quick Jump**: Click outline item to jump to position (auto-switches to edit mode from preview)
 - **Level Icons**: Different icons for different levels, clear visual hierarchy
 
 ### 🔍 Search
@@ -60,8 +60,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **Result Sorting**: Automatically sort by match count
 
 ### 📝 Edit and Preview
-- **Edit by Default**: Click file to open editor by default
-- **One-click Toggle**: Button in editor top-right to switch edit/preview mode
+- **Preview by Default**: Click Markdown file to open in preview mode, read rendered content directly
+- **One-click Toggle**: Preview/Markdown button in editor top-right to switch modes
 - **Outline Sync**: Outline remains visible and functional in preview mode
 
 ## Quick Start
@@ -96,9 +96,9 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
    - View search results and click to open files
 
 5. **Edit and Preview**
-   - Click Markdown file → Opens editor by default
-   - Click 👁️ button in editor top-right to enter preview
-   - Click ✏️ button in preview mode to return to edit
+   - Click Markdown file → Opens in preview mode by default
+   - Click **Markdown** button in top-right to switch to edit mode
+   - Click **Preview** button in top-right to switch back to preview
 
 ## Keyboard Shortcuts
 
