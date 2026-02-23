@@ -27,8 +27,7 @@
     "cora"
   ],
   "activationEvents": [
-    "onView:pageTree",
-    "onCustomEditor:cora.markdownEditor"
+    "onView:pageTree"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -72,21 +71,6 @@
       {
         "view": "search",
         "contents": "搜索笔记内容\n支持：• 单个关键词：A • 多个关键词：A B\n[开始搜索](command:knowledgeBase.searchNotes)"
-      }
-    ],
-    "customEditors": [
-      {
-        "viewType": "cora.markdownEditor",
-        "displayName": "Cora Markdown Editor",
-        "selector": [
-          {
-            "filenamePattern": "*.md"
-          },
-          {
-            "filenamePattern": "*.markdown"
-          }
-        ],
-        "priority": "option"
       }
     ],
     "commands": [
@@ -153,10 +137,6 @@
       {
         "command": "knowledgeBase.gotoHeading",
         "title": "跳转到标题"
-      },
-      {
-        "command": "knowledgeBase.openTextEditor",
-        "title": "打开编辑器"
       },
       {
         "command": "knowledgeBase.revealInFinder",

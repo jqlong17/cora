@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
 import { SearchProvider } from './providers/searchProvider';
-import { MarkdownEditorProvider } from './providers/markdownEditorProvider';
 import { FileService } from './services/fileService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
@@ -46,11 +45,6 @@ export function activate(context: vscode.ExtensionContext) {
     // 存储视图引用到提供器中
     pageTreeProvider.setTreeView(pageTreeView);
     outlineProvider.setTreeView(outlineTreeView);
-
-    // 注册 Custom Markdown Editor
-    context.subscriptions.push(
-        MarkdownEditorProvider.register(context)
-    );
 
     // 注册命令
     context.subscriptions.push(
@@ -98,10 +92,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('knowledgeBase.togglePreviewEditor', () => {
             commands.togglePreviewEditor();
         }),
-        vscode.commands.registerCommand('knowledgeBase.openTextEditor', (uri) => {
-            openTextEditor(uri);
-        }),
-
         // 大纲命令
         vscode.commands.registerCommand('knowledgeBase.gotoHeading', (line) => {
             commands.gotoHeading(line);
@@ -293,15 +283,6 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
         }
     }
 
-    // For Cora Custom Editor
-    if (input.viewType === 'cora.markdownEditor') {
-        // Custom editor stores URI in the 'uri' property
-        if (input.uri) {
-            console.log('Found Cora Custom Editor URI:', input.uri);
-            return typeof input.uri === 'string' ? vscode.Uri.file(input.uri) : input.uri;
-        }
-    }
-
     // Try common properties
     const possibleUri = input.resource || input.path || input.document || input.fileName || input.fsPath;
     if (possibleUri) {
@@ -319,32 +300,3 @@ function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
     return undefined;
 }
 
-// Helper function to open markdown preview by default (using VS Code native preview)
-// Opens both editor and preview so the toggle buttons are visible
-async function openTextEditor(uri: vscode.Uri): Promise<void> {
-    try {
-        // Check if it's a markdown file
-        const document = await vscode.workspace.openTextDocument(uri);
-        const isMarkdown = document.languageId === 'markdown';
-
-        if (isMarkdown) {
-            // First open the text editor (this creates the editor tab)
-            await vscode.window.showTextDocument(document, {
-                preview: false,
-                preserveFocus: false,
-                viewColumn: vscode.ViewColumn.One
-            });
-            // Then open the preview - this will show the Preview/Markdown toggle
-            await vscode.commands.executeCommand('markdown.showPreview', uri);
-        } else {
-            // Open text editor for non-markdown files
-            await vscode.window.showTextDocument(document, {
-                preview: false,
-                preserveFocus: false,
-                viewColumn: vscode.ViewColumn.One
-            });
-        }
-    } catch (error) {
-        vscode.window.showErrorMessage(`无法打开文件: ${error}`);
-    }
-}
