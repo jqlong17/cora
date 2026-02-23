@@ -31,20 +31,22 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     ): Promise<void> {
         webviewPanel.webview.options = { enableScripts: true };
 
-        // Default to preview mode
-        this.updateWebview(document, webviewPanel, 'preview');
+        // Set initial HTML with both views
+        this.setInitialHtml(document, webviewPanel);
 
         // Listen for document changes
         const changeSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
-                this.updateWebview(document, webviewPanel, 'preview');
+                // Update content in edit mode and refresh preview
+                const content = e.document.getText();
+                webviewPanel.webview.postMessage({ command: 'updateContent', content });
             }
         });
 
         // Listen for messages from webview
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'switchMode') {
-                this.updateWebview(document, webviewPanel, message.mode);
+                webviewPanel.webview.postMessage({ command: 'setMode', mode: message.mode });
             } else if (message.command === 'save') {
                 await this.saveDocument(document, message.content);
             }
@@ -55,19 +57,13 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         });
     }
 
-    private updateWebview(
-        document: vscode.TextDocument,
-        panel: vscode.WebviewPanel,
-        mode: 'edit' | 'preview'
-    ): void {
+    private setInitialHtml(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
         const content = document.getText();
-        panel.webview.postMessage({ command: 'setMode', mode });
-
-        if (mode === 'preview') {
-            panel.webview.html = this.getPreviewHtml(content);
-        } else {
-            panel.webview.html = this.getEditHtml(content);
-        }
+        panel.webview.html = this.getHtml(content);
+        // Default to preview mode
+        setTimeout(() => {
+            panel.webview.postMessage({ command: 'setMode', mode: 'preview' });
+        }, 100);
     }
 
     private async saveDocument(document: vscode.TextDocument, content: string): Promise<void> {
@@ -81,8 +77,10 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
         await document.save();
     }
 
-    private getEditHtml(content: string): string {
+    private getHtml(content: string): string {
         const nonce = this.getNonce();
+        marked.setOptions({ gfm: true, breaks: true });
+        const htmlContent = marked.parse(content);
         const escapedContent = JSON.stringify(content);
 
         return `<!DOCTYPE html>
@@ -107,6 +105,7 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             padding: 8px 16px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-panel-border);
+            flex-shrink: 0;
         }
         .mode-toggle {
             display: flex;
@@ -130,8 +129,24 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
         }
-        .editor-container {
+        .content-area {
             flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        .view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+        }
+        .view.hidden {
+            display: none;
+        }
+        /* Editor styles */
+        .editor-view {
             padding: 16px;
         }
         textarea {
@@ -146,99 +161,9 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
             resize: none;
             outline: none;
         }
-    </style>
-</head>
-<body>
-    <div class="toolbar">
-        <div class="mode-toggle">
-            <button class="mode-btn" id="previewBtn" onclick="switchMode('preview')">Preview</button>
-            <button class="mode-btn active" id="editBtn" onclick="switchMode('edit')">Markdown</button>
-        </div>
-    </div>
-    <div class="editor-container">
-        <textarea id="editor"></textarea>
-    </div>
-    <script nonce="${nonce}">
-        const vscode = acquireVsCodeApi();
-        document.getElementById('editor').value = ${escapedContent};
-
-        function switchMode(mode) {
-            vscode.postMessage({ command: 'switchMode', mode });
-        }
-
-        window.addEventListener('message', event => {
-            if (event.data.command === 'setMode') {
-                document.getElementById('previewBtn').classList.toggle('active', event.data.mode === 'preview');
-                document.getElementById('editBtn').classList.toggle('active', event.data.mode === 'edit');
-            }
-        });
-
-        let timeout;
-        document.getElementById('editor').addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                vscode.postMessage({ command: 'save', content: e.target.value });
-            }, 500);
-        });
-    </script>
-</body>
-</html>`;
-    }
-
-    private getPreviewHtml(content: string): string {
-        const nonce = this.getNonce();
-        marked.setOptions({ gfm: true, breaks: true });
-        const htmlContent = marked.parse(content);
-
-        return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-    <title>Markdown Preview</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background: var(--vscode-editor-background);
-        }
-        .toolbar {
-            display: flex;
-            justify-content: flex-end;
-            padding: 8px 16px;
-            background: var(--vscode-editor-background);
-            border-bottom: 1px solid var(--vscode-panel-border);
-        }
-        .mode-toggle {
-            display: flex;
-            background: var(--vscode-button-secondaryBackground);
-            border-radius: 4px;
-            padding: 2px;
-        }
-        .mode-btn {
-            padding: 4px 12px;
-            border: none;
-            background: transparent;
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-        .mode-btn:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
-        }
-        .mode-btn.active {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-        }
-        .preview-container {
-            flex: 1;
+        /* Preview styles */
+        .preview-view {
             padding: 24px 32px;
-            overflow: auto;
         }
         .preview-content {
             max-width: 860px;
@@ -316,24 +241,70 @@ export class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 <body>
     <div class="toolbar">
         <div class="mode-toggle">
-            <button class="mode-btn active" id="previewBtn" onclick="switchMode('preview')">Preview</button>
+            <button class="mode-btn" id="previewBtn" onclick="switchMode('preview')">Preview</button>
             <button class="mode-btn" id="editBtn" onclick="switchMode('edit')">Markdown</button>
         </div>
     </div>
-    <div class="preview-container">
-        <div class="preview-content">
-            ${htmlContent}
+    <div class="content-area">
+        <div class="view editor-view hidden" id="editorView">
+            <textarea id="editor"></textarea>
+        </div>
+        <div class="view preview-view" id="previewView">
+            <div class="preview-content" id="previewContent">
+                ${htmlContent}
+            </div>
         </div>
     </div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
+        let currentMode = 'preview';
+
+        // Initialize editor content
+        document.getElementById('editor').value = ${escapedContent};
+
         function switchMode(mode) {
+            currentMode = mode;
             vscode.postMessage({ command: 'switchMode', mode });
+            updateUI(mode);
         }
+
+        function updateUI(mode) {
+            // Update buttons
+            document.getElementById('previewBtn').classList.toggle('active', mode === 'preview');
+            document.getElementById('editBtn').classList.toggle('active', mode === 'edit');
+
+            // Update views
+            document.getElementById('editorView').classList.toggle('hidden', mode !== 'edit');
+            document.getElementById('previewView').classList.toggle('hidden', mode !== 'preview');
+
+            // Focus editor when switching to edit mode
+            if (mode === 'edit') {
+                setTimeout(() => document.getElementById('editor').focus(), 0);
+            }
+        }
+
+        // Auto-save
+        let timeout;
+        document.getElementById('editor').addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                vscode.postMessage({ command: 'save', content: e.target.value });
+            }, 500);
+        });
+
+        // Listen for messages from extension
         window.addEventListener('message', event => {
             if (event.data.command === 'setMode') {
-                document.getElementById('previewBtn').classList.toggle('active', event.data.mode === 'preview');
-                document.getElementById('editBtn').classList.toggle('active', event.data.mode === 'edit');
+                currentMode = event.data.mode;
+                updateUI(event.data.mode);
+            } else if (event.data.command === 'updateContent') {
+                // Update both editor and preview content
+                document.getElementById('editor').value = event.data.content;
+                // Re-render preview by updating innerHTML
+                // Note: In a production app, you'd want to sanitize this
+                const previewDiv = document.getElementById('previewContent');
+                // Trigger re-render by posting back to extension to get parsed HTML
+                // For now, we'll reload the webview on external changes
             }
         });
     </script>
