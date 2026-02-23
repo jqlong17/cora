@@ -135,9 +135,14 @@
         "title": "跳转到标题"
       },
       {
-        "command": "knowledgeBase.togglePreviewEditor",
-        "title": "切换预览/编辑",
-        "icon": "$(split-horizontal)"
+        "command": "knowledgeBase.openPreview",
+        "title": "打开预览",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "knowledgeBase.openEditor",
+        "title": "打开编辑",
+        "icon": "$(edit)"
       },
       {
         "command": "knowledgeBase.openTextEditor",
@@ -147,8 +152,13 @@
     "menus": {
       "editor/title": [
         {
-          "command": "knowledgeBase.togglePreviewEditor",
-          "when": "editorLangId == markdown",
+          "command": "knowledgeBase.openPreview",
+          "when": "editorLangId == markdown && !markdownPreviewFocus",
+          "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.openEditor",
+          "when": "markdownPreviewFocus",
           "group": "navigation@1"
         }
       ],
