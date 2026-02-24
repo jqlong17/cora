@@ -12,3 +12,4 @@ test-workspace/**
 e2e/**
 scripts/**
 assets/**
+.env
