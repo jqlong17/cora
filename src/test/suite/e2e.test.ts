@@ -592,10 +592,9 @@ suite('Cora E2E Test Suite', () => {
             const document = await vscode.workspace.openTextDocument(testFile);
             const editor = await vscode.window.showTextDocument(document);
 
-            // 通过编辑器更新大纲提供者
-            await outlineProvider.updateForEditor(editor);
+            outlineProvider.updateForEditor(editor);
+            await new Promise(resolve => setTimeout(resolve, 400));
 
-            // getChildren() 不传参数只返回根节点（H1）
             const rootItems = await outlineProvider.getChildren();
             assert.ok(rootItems.length > 0, 'Should have root outline items');
 
@@ -620,6 +619,86 @@ suite('Cora E2E Test Suite', () => {
             outlineProvider.clear();
             const items = await outlineProvider.getChildren();
             assert.strictEqual(items.length, 0, 'Outline should be empty after clear');
+        });
+
+        test('should refresh outline after document save (e.g. edit mode save)', async function() {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                this.skip();
+                return;
+            }
+
+            const testFile = path.join(testWorkspacePath, 'outline-refresh-test.md');
+            const initialContent = '# 测试\n\n## 第一节\n\n内容\n\n';
+            const updatedContent = '# 测试\n\n## 第一节\n\n内容\n\n## 笔记2\n\n## 笔记3\n';
+
+            await fs.promises.writeFile(testFile, initialContent, 'utf8');
+            const uri = vscode.Uri.file(testFile);
+
+            await outlineProvider.updateForUri(uri);
+            let rootItems = await outlineProvider.getChildren();
+            let h1 = rootItems.find(item => item.heading.level === 1);
+            assert.ok(h1, 'Should have H1');
+            let h2Items = await outlineProvider.getChildren(h1!);
+            const textsBefore = h2Items.map(item => item.heading.text);
+            assert.ok(!textsBefore.includes('笔记2'), 'Before save: 笔记2 should not be in outline');
+            assert.ok(!textsBefore.includes('笔记3'), 'Before save: 笔记3 should not be in outline');
+
+            await fs.promises.writeFile(testFile, updatedContent, 'utf8');
+            outlineProvider.updateForUri(uri);
+
+            rootItems = await outlineProvider.getChildren();
+            h1 = rootItems.find(item => item.heading.level === 1);
+            assert.ok(h1, 'Should have H1 after refresh');
+            h2Items = await outlineProvider.getChildren(h1!);
+            const textsAfter = h2Items.map(item => item.heading.text);
+            assert.ok(textsAfter.includes('笔记2'), 'After save: outline should include 笔记2');
+            assert.ok(textsAfter.includes('笔记3'), 'After save: outline should include 笔记3');
+
+            try { fs.unlinkSync(testFile); } catch (_) {}
+        });
+
+        test('should update outline in real-time when editing in text editor', async function() {
+            const testFile = path.join(testWorkspacePath, 'outline-realtime-test.md');
+            const initialContent = '# 项目计划\n\n## 时间安排\n\n### 标题\n\n';
+            await fs.promises.writeFile(testFile, initialContent, 'utf8');
+
+            const document = await vscode.workspace.openTextDocument(testFile);
+            const editor = await vscode.window.showTextDocument(document);
+
+            outlineProvider.updateForEditor(editor);
+            await new Promise(resolve => setTimeout(resolve, 400));
+
+            const getAllHeadingTexts = async (): Promise<string[]> => {
+                const texts: string[] = [];
+                const collect = async (items: OutlineItem[]) => {
+                    for (const item of items) {
+                        texts.push(item.heading.text);
+                        const children = await outlineProvider.getChildren(item);
+                        await collect(children);
+                    }
+                };
+                await collect(await outlineProvider.getChildren());
+                return texts;
+            };
+
+            let texts = await getAllHeadingTexts();
+            assert.ok(texts.includes('标题'), 'Initial outline should contain 标题');
+            assert.ok(!texts.includes('标题2222'), 'Initial outline should not yet contain 标题2222');
+
+            await editor.edit(editBuilder => {
+                const end = document.lineAt(document.lineCount - 1).range.end;
+                editBuilder.insert(end, '\n### 标题2222\n');
+            });
+
+            outlineProvider.updateForEditor(editor);
+            await new Promise(resolve => setTimeout(resolve, 400));
+
+            texts = await getAllHeadingTexts();
+            assert.ok(texts.includes('标题2222'), 'Outline should update in real-time and include 标题2222 after edit');
+
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            try { fs.unlinkSync(testFile); } catch (_) {}
         });
     });
 

@@ -7,7 +7,8 @@ import { isMarkdownFile } from '../utils/markdownParser';
 export class OutlineItem extends vscode.TreeItem {
     constructor(
         public readonly heading: Heading,
-        hasChildren: boolean = false
+        hasChildren: boolean = false,
+        documentUri?: vscode.Uri
     ) {
         super(
             heading.text,
@@ -18,18 +19,11 @@ export class OutlineItem extends vscode.TreeItem {
         this.command = {
             command: 'knowledgeBase.gotoHeading',
             title: '跳转到标题',
-            arguments: [heading.line]
+            // 传字符串而非 vscode.Uri 对象，避免 VS Code 序列化/反序列化命令参数时丢失类型
+            arguments: documentUri ? [heading.line, documentUri.toString()] : [heading.line]
         };
 
-        const iconMap: Record<number, string> = {
-            1: 'symbol-key',
-            2: 'symbol-enum',
-            3: 'symbol-field',
-            4: 'symbol-variable',
-            5: 'symbol-constant',
-            6: 'symbol-property'
-        };
-        this.iconPath = new vscode.ThemeIcon(iconMap[heading.level] || 'symbol-string');
+        // 仅用 H1、H2、H3 等文字标识层级，不再使用图标
         this.contextValue = `heading-${heading.level}`;
         this.description = `H${heading.level}`;
     }
@@ -42,6 +36,8 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
     private treeView: vscode.TreeView<OutlineItem> | undefined;
     private currentHeadings: Heading[] = [];
     private currentEditor: vscode.TextEditor | undefined;
+    private currentDocumentUri: vscode.Uri | undefined;
+    private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(
         private outlineService: OutlineService,
@@ -78,11 +74,23 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
     clear(): void {
         this.currentHeadings = [];
         this.currentEditor = undefined;
+        this.currentDocumentUri = undefined;
         this.refresh();
     }
 
-    async updateForEditor(editor: vscode.TextEditor): Promise<void> {
-        await this.updateForDocument(editor.document, editor);
+    /**
+     * 编辑器内容变化时调用，带 300ms 防抖，防止每次按键都触发全量解析和并发竞争
+     */
+    updateForEditor(editor: vscode.TextEditor): void {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+        this.debounceTimer = setTimeout(() => {
+            this.debounceTimer = undefined;
+            this.updateForDocument(editor.document, editor).catch(err => {
+                console.error('Outline updateForDocument failed:', err);
+            });
+        }, 300);
     }
 
     async updateForUri(uri: vscode.Uri): Promise<void> {
@@ -93,6 +101,22 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
             console.error('Error opening document:', error);
             this.clear();
         }
+    }
+
+    /**
+     * 用当前未保存的字符串内容更新大纲（如编辑模式下实时刷新）
+     */
+    async updateFromContent(uri: vscode.Uri, content: string): Promise<void> {
+        const markdownExtensions = this.configService.getMarkdownExtensions();
+        const isMarkdown = isMarkdownFile(uri.fsPath, markdownExtensions);
+        const showNonMarkdown = this.configService.getShowOutlineForNonMarkdown();
+        if (!isMarkdown && !showNonMarkdown) {
+            return;
+        }
+        this.currentDocumentUri = uri;
+        this.currentEditor = undefined;
+        this.currentHeadings = await this.outlineService.getHeadingsFromContent(content);
+        this.refresh();
     }
 
     private async updateForDocument(document: vscode.TextDocument, editor?: vscode.TextEditor): Promise<void> {
@@ -106,7 +130,9 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
         }
 
         this.currentEditor = editor;
-        this.currentHeadings = await this.outlineService.getHeadings(document);
+        this.currentDocumentUri = document.uri;
+        // 始终用当前文档内容解析，不依赖缓存，保证编辑后大纲实时一致
+        this.currentHeadings = await this.outlineService.getHeadingsFromContent(document.getText());
         this.refresh();
     }
 
@@ -132,7 +158,7 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
         }
         const parentHeading = this.currentHeadings[parentIdx];
         const parentHasChildren = parentMap.some(p => p === parentIdx);
-        return new OutlineItem(parentHeading, parentHasChildren);
+        return new OutlineItem(parentHeading, parentHasChildren, this.currentDocumentUri);
     }
 
     async getChildren(element?: OutlineItem): Promise<OutlineItem[]> {
@@ -150,7 +176,7 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
             return this.currentHeadings
                 .map((h, i) => ({ heading: h, index: i }))
                 .filter(({ index }) => parentMap[index] === -1)
-                .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index)));
+                .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index), this.currentDocumentUri));
         }
 
         const parentIdx = this.currentHeadings.findIndex(h =>
@@ -163,7 +189,7 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
         return this.currentHeadings
             .map((h, i) => ({ heading: h, index: i }))
             .filter(({ index }) => parentMap[index] === parentIdx)
-            .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index)));
+            .map(({ heading, index }) => new OutlineItem(heading, hasChildrenAt(index), this.currentDocumentUri));
     }
 
     /**
@@ -187,5 +213,9 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
 
     getCurrentEditor(): vscode.TextEditor | undefined {
         return this.currentEditor;
+    }
+
+    getCurrentDocumentUri(): vscode.Uri | undefined {
+        return this.currentDocumentUri;
     }
 }

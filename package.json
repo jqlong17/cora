@@ -47,17 +47,20 @@
         {
           "id": "pageTree",
           "name": "页面",
-          "when": "true"
+          "when": "true",
+          "size": 2
         },
         {
           "id": "kbOutline",
           "name": "大纲",
-          "when": "true"
+          "when": "true",
+          "size": 1
         },
         {
           "id": "search",
           "name": "搜索",
-          "when": "true"
+          "when": "true",
+          "size": 1
         }
       ]
     },
@@ -211,6 +214,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "knowledgeBase.newFolder",
+          "when": "view == pageTree",
+          "group": "navigation@3"
+        },
+        {
           "command": "knowledgeBase.outlineCollapseAll",
           "when": "view == kbOutline",
           "group": "navigation@1"
@@ -297,7 +305,7 @@
         },
         "knowledgeBase.pageViewMode": {
           "type": "string",
-          "default": "flat",
+          "default": "tree",
           "enum": [
             "flat",
             "tree"

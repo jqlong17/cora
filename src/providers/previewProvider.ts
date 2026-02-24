@@ -10,7 +10,13 @@ export class PreviewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private currentUri: vscode.Uri | undefined;
 
-    constructor(private context: vscode.ExtensionContext) {}
+    /** 编辑模式下保存（saveAndPreview）后调用，用于刷新大纲等 */
+    /** 编辑模式下内容变更时调用（防抖后），用于左侧大纲实时更新 */
+    constructor(
+        private context: vscode.ExtensionContext,
+        private onDocumentSaved?: (uri: vscode.Uri) => void,
+        private onContentChanged?: (uri: vscode.Uri, content: string) => void
+    ) {}
 
     /**
      * 打开预览面板（每次调用都切到 Preview 模式，不关心之前是否在编辑或其他文件）
@@ -46,11 +52,14 @@ export class PreviewProvider {
 
         // 监听 webview 消息：全部在自有 webview 内切换，不调用 VS Code 编辑器
         this.panel.webview.onDidReceiveMessage(async (msg) => {
-            if (!this.panel || !this.currentUri) return;
+            if (!this.panel || !this.currentUri) {
+                return;
+            }
             if (msg.command === 'openMarkdown') {
                 try {
                     const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
                     this.panel.webview.html = this.generateMarkdownEditorHtml(content, this.panel.webview);
+                    this.onContentChanged?.(this.currentUri, content);
                 } catch (e) {
                     console.error(e);
                 }
@@ -60,11 +69,14 @@ export class PreviewProvider {
                         this.currentUri,
                         new TextEncoder().encode(msg.content)
                     );
+                    this.onDocumentSaved?.(this.currentUri);
                     await this.updatePreview();
                 } catch (e) {
                     console.error(e);
                     this.panel.webview.html = this.getErrorHtml('保存失败');
                 }
+            } else if (msg.command === 'outlineUpdate' && typeof msg.content === 'string') {
+                this.onContentChanged?.(this.currentUri, msg.content);
             }
         });
 
@@ -146,6 +158,11 @@ export class PreviewProvider {
             box-sizing: border-box;
         }
 
+        html {
+            /* 始终保留滚动条槽位，防止内容高度变化时按钮位置偏移 */
+            scrollbar-gutter: stable;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             font-size: 14px;
@@ -154,11 +171,17 @@ export class PreviewProvider {
             background: var(--vscode-editor-background, #fff);
             margin: 0;
             padding: 0;
+            padding-top: 48px;
         }
         .cora-toolbar-wrap {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 10;
             padding: 12px 16px 8px;
             display: flex;
             justify-content: flex-end;
+            background: var(--vscode-editor-background, #fff);
         }
         .cora-content {
             padding: 0 32px 24px;
@@ -383,6 +406,10 @@ export class PreviewProvider {
     <title>编辑</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html {
+            /* 始终保留滚动条槽位，与预览模式宽度保持一致，防止按钮位置偏移 */
+            scrollbar-gutter: stable;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 14px;
@@ -391,11 +418,17 @@ export class PreviewProvider {
             height: 100vh;
             display: flex;
             flex-direction: column;
+            padding-top: 48px;
         }
         .cora-toolbar-wrap {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 10;
             padding: 12px 16px 8px;
             display: flex;
             justify-content: flex-end;
+            background: var(--vscode-editor-background, #fff);
         }
         .preview-toolbar {
             display: flex;
@@ -539,10 +572,20 @@ export class PreviewProvider {
                 ta.addEventListener('scroll', function() { if (ln) ln.scrollTop = ta.scrollTop; });
             }
             var btn = document.getElementById('btn-preview');
-            if (btn && typeof acquireVsCodeApi !== 'undefined') {
-                var vscode = acquireVsCodeApi();
+            var vscodeApi = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
+            if (btn && vscodeApi) {
                 btn.addEventListener('click', function() {
-                    vscode.postMessage({ command: 'saveAndPreview', content: ta ? ta.value : '' });
+                    vscodeApi.postMessage({ command: 'saveAndPreview', content: ta ? ta.value : '' });
+                });
+            }
+            if (ta && vscodeApi) {
+                var outlineTimer = null;
+                ta.addEventListener('input', function() {
+                    if (outlineTimer) clearTimeout(outlineTimer);
+                    outlineTimer = setTimeout(function() {
+                        outlineTimer = null;
+                        vscodeApi.postMessage({ command: 'outlineUpdate', content: ta.value });
+                    }, 250);
                 });
             }
         })();

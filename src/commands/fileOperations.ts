@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { FileService, FileItem } from '../services/fileService';
-import { PageTreeProvider } from '../providers/pageTreeProvider';
+import { PageTreeProvider, PageTreeItem } from '../providers/pageTreeProvider';
 import { generateNoteTitle, sanitizeFileName } from '../utils/markdownParser';
 import type { PreviewProvider } from '../providers/previewProvider';
 import { openPreview } from './editorCommands';
@@ -10,7 +10,8 @@ export async function newNote(
     item: { item: FileItem } | undefined,
     fileService: FileService,
     pageTreeProvider: PageTreeProvider,
-    previewProvider: PreviewProvider
+    previewProvider: PreviewProvider,
+    treeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
     // Determine the parent folder
     let parentUri: vscode.Uri;
@@ -19,19 +20,26 @@ export async function newNote(
     } else if (item && item.item.type === 'file') {
         parentUri = vscode.Uri.file(path.dirname(item.item.uri.fsPath));
     } else {
-        // Use first workspace folder
+        // Use first workspace folder；无选中时先定位到页面树根节点再显示输入框
         const folders = fileService.getWorkspaceFolders();
         if (folders.length === 0) {
             vscode.window.showErrorMessage('请先打开一个工作区');
             return;
         }
         parentUri = folders[0].uri;
+        if (treeView) {
+            const roots = await pageTreeProvider.getChildren();
+            if (roots.length > 0) {
+                await treeView.reveal(roots[0], { focus: true, expand: true });
+            }
+        }
     }
 
-    // Ask for file name
+    // 显示将创建于的路径（相对工作区），让用户明确创建位置
+    const createAtPath = vscode.workspace.asRelativePath(parentUri, false);
     const defaultName = `${generateNoteTitle()}.md`;
     const fileName = await vscode.window.showInputBox({
-        prompt: '输入笔记文件名',
+        prompt: createAtPath ? `输入笔记文件名（将创建于: ${createAtPath}/）` : '输入笔记文件名',
         value: defaultName,
         validateInput: (value) => {
             if (!value || value.trim() === '') {
@@ -61,7 +69,8 @@ export async function newNote(
 export async function newFolder(
     item: { item: FileItem } | undefined,
     fileService: FileService,
-    pageTreeProvider: PageTreeProvider
+    pageTreeProvider: PageTreeProvider,
+    treeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
     // Determine the parent folder
     let parentUri: vscode.Uri;
@@ -70,18 +79,23 @@ export async function newFolder(
     } else if (item && item.item.type === 'file') {
         parentUri = vscode.Uri.file(path.dirname(item.item.uri.fsPath));
     } else {
-        // Use first workspace folder
         const folders = fileService.getWorkspaceFolders();
         if (folders.length === 0) {
             vscode.window.showErrorMessage('请先打开一个工作区');
             return;
         }
         parentUri = folders[0].uri;
+        if (treeView) {
+            const roots = await pageTreeProvider.getChildren();
+            if (roots.length > 0) {
+                await treeView.reveal(roots[0], { focus: true, expand: true });
+            }
+        }
     }
 
-    // Ask for folder name
+    const createAtPath = vscode.workspace.asRelativePath(parentUri, false);
     const folderName = await vscode.window.showInputBox({
-        prompt: '输入文件夹名称',
+        prompt: createAtPath ? `输入文件夹名称（将创建于: ${createAtPath}/）` : '输入文件夹名称',
         validateInput: (value) => {
             if (!value || value.trim() === '') {
                 return '文件夹名称不能为空';

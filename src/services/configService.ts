@@ -21,7 +21,7 @@ export class ConfigService {
     }
 
     getPageViewMode(): PageViewMode {
-        return this.config.get<PageViewMode>(CONFIG_KEYS.PAGE_VIEW_MODE, 'flat');
+        return this.config.get<PageViewMode>(CONFIG_KEYS.PAGE_VIEW_MODE, 'tree');
     }
 
     async setPageViewMode(mode: PageViewMode): Promise<void> {

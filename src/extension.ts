@@ -19,7 +19,15 @@ export function activate(context: vscode.ExtensionContext) {
     // 初始化数据提供器
     const pageTreeProvider = new PageTreeProvider(fileService, configService);
     const outlineProvider = new OutlineProvider(outlineService, configService);
-    const previewProvider = new PreviewProvider(context);
+    const previewProvider = new PreviewProvider(
+        context,
+        (uri) => outlineProvider.updateForUri(uri),
+        (uri, content) => {
+            void outlineProvider.updateFromContent(uri, content).catch(err =>
+                console.error('Cora outline updateFromContent failed', err)
+            );
+        }
+    );
     const searchProvider = new SearchProvider(fileService, configService);
 
     // 跟踪最后已知的文档 URI（用于预览模式）
@@ -75,10 +83,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         // 文件操作命令
         vscode.commands.registerCommand('knowledgeBase.newNote', (item) => {
-            commands.newNote(item, fileService, pageTreeProvider, previewProvider);
+            commands.newNote(item, fileService, pageTreeProvider, previewProvider, pageTreeView);
         }),
         vscode.commands.registerCommand('knowledgeBase.newFolder', (item) => {
-            commands.newFolder(item, fileService, pageTreeProvider);
+            commands.newFolder(item, fileService, pageTreeProvider, pageTreeView);
         }),
         vscode.commands.registerCommand('knowledgeBase.deleteItem', (item) => {
             commands.deleteItem(item, fileService, pageTreeProvider);
@@ -88,18 +96,31 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         // 编辑和预览命令（统一走 Cora 自带预览，支持 Mermaid）
-        vscode.commands.registerCommand('knowledgeBase.openPreview', (uri) => {
-            commands.openPreview(previewProvider, uri);
+        vscode.commands.registerCommand('knowledgeBase.openPreview', async (uri: vscode.Uri | undefined) => {
+            await commands.openPreview(previewProvider, uri);
+            // openPreview 是 Webview，无法通过 onDidChangeActiveTextEditor 拿到 URI，
+            // 必须在此处主动更新 lastKnownUri 并刷新大纲
+            const effectiveUri = uri ?? previewProvider.getCurrentUri();
+            if (effectiveUri) {
+                lastKnownUri = effectiveUri;
+                outlineProvider.updateForUri(effectiveUri);
+            }
         }),
-        vscode.commands.registerCommand('knowledgeBase.openEditor', (uri) => {
-            commands.openEditor(uri);
+        vscode.commands.registerCommand('knowledgeBase.openEditor', async (uri: vscode.Uri | undefined) => {
+            await commands.openEditor(uri);
+            // openEditor 会打开文本编辑器，onDidChangeActiveTextEditor 会触发并更新大纲，
+            // 但为了 lastKnownUri 能及时更新，也在此处同步
+            const effectiveUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+            if (effectiveUri) {
+                lastKnownUri = effectiveUri;
+            }
         }),
         vscode.commands.registerCommand('knowledgeBase.togglePreviewEditor', () => {
             commands.togglePreviewEditor(previewProvider);
         }),
         // 大纲命令
-        vscode.commands.registerCommand('knowledgeBase.gotoHeading', (line) => {
-            commands.gotoHeading(line);
+        vscode.commands.registerCommand('knowledgeBase.gotoHeading', (line: number, documentUriStr?: string) => {
+            commands.gotoHeading(line, documentUriStr, previewProvider, outlineProvider);
         }),
 
         // 右键菜单命令
@@ -147,17 +168,15 @@ export function activate(context: vscode.ExtensionContext) {
                 lastKnownUri = editor.document.uri;
                 outlineProvider.updateForEditor(editor);
             } else {
-                // Editor is undefined, might be preview mode
-                // Try to get URI from tab, fallback to lastKnownUri
+                // 无活动文本编辑器：当前可能是 Cora 预览/编辑 Webview
                 const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
                 if (activeTab) {
-                    let uri = getUriFromTab(activeTab);
-                    if (!uri && lastKnownUri) {
-                        console.log('Using last known URI:', lastKnownUri.toString());
-                        uri = lastKnownUri;
-                    }
+                    const uri = getUriFromTab(activeTab);
                     if (uri) {
                         outlineProvider.updateForUri(uri);
+                    } else if (lastKnownUri) {
+                        // 当前标签是 Webview（getUriFromTab 为空），不在这里用磁盘覆盖大纲，
+                        // 否则会冲掉编辑模式里未保存的内容；大纲由 outlineUpdate 消息或 openPreview 时更新
                     } else {
                         outlineProvider.clear();
                     }
