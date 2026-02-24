@@ -40,7 +40,7 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 ## Features
 
 ### 📄 Page Tree
-- **Flat/Tree Toggle**: By default, Markdown files are shown in a flat list sorted by modification time (newest first); you can switch to a folder hierarchy tree view
+- **Flat/Tree Toggle**: By default, files are shown in a folder hierarchy tree; you can switch to a flat list sorted by modification time (newest first)
 - **File Tree View**: In tree mode, display complete file hierarchy from workspace root
 - **Smart Filtering**: In tree mode, toggle between [All Files] and [Markdown Only]
 - **Quick Actions**: New note, new folder, rename, delete
@@ -48,10 +48,10 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **Expand/Collapse**: Expand all, collapse all
 
 ### 📋 Outline
-- **Real-time Following**: Automatically follow the active editor/preview
+- **Real-time Following**: Automatically follow the active editor/preview; outline updates as you edit (including Cora edit mode)
 - **Tree Hierarchy**: H1→H2→H3 auto-builds parent-child relationships, expanded by default
-- **Quick Jump**: Click outline item to jump to position (auto-switches to edit mode from preview)
-- **Level Icons**: Different icons for different levels, clear visual hierarchy
+- **Quick Jump**: Click outline item to jump to position (works in both preview and edit mode)
+- **Level Labels**: H1, H2, H3 text labels for heading levels, clean and clear
 
 ### 🔍 Search
 - **Full-text Search**: Search content across all Markdown files in workspace
@@ -82,8 +82,8 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
    - Or use shortcut `Cmd+Shift+P` and type "Cora"
 
 2. **Browse Files (Page Tree)**
-   - In the [Pages] tab, the default **flat** view lists all Markdown files sorted by modification time (newest first)
-   - Use the toolbar “Toggle flat/tree” to switch between flat and tree view; in tree view use [All/Markdown] filter
+   - In the [Pages] tab, the default **tree** view shows folder hierarchy; you can switch to flat view sorted by modification time
+   - Toolbar: **New note**, **New folder**; “Toggle flat/tree” to switch view; in tree view use [All/Markdown] filter
    - Right-click files for various operations
 
 3. **View Document Structure (Outline)**
@@ -138,7 +138,7 @@ Search for "knowledgeBase" in VS Code settings to configure:
 | Config | Type | Default | Description |
 |--------|------|---------|-------------|
 | `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode (tree view) |
-| `knowledgeBase.pageViewMode` | string | `"flat"` | Page view mode: `flat` (by mtime) or `tree` (hierarchy) |
+| `knowledgeBase.pageViewMode` | string | `"tree"` | Page view mode: `tree` (hierarchy) or `flat` (by mtime) |
 | `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions |
 | `knowledgeBase.autoReveal` | boolean | `true` | Auto reveal current file in page tree |
 
