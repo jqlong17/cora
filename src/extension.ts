@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
+import { PreviewProvider } from './providers/previewProvider';
 import { SearchProvider } from './providers/searchProvider';
 import { FileService } from './services/fileService';
 import { OutlineService } from './services/outlineService';
@@ -18,6 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 初始化数据提供器
     const pageTreeProvider = new PageTreeProvider(fileService, configService);
     const outlineProvider = new OutlineProvider(outlineService, configService);
+    const previewProvider = new PreviewProvider(context);
     const searchProvider = new SearchProvider(fileService, configService);
 
     // 跟踪最后已知的文档 URI（用于预览模式）
@@ -73,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // 文件操作命令
         vscode.commands.registerCommand('knowledgeBase.newNote', (item) => {
-            commands.newNote(item, fileService, pageTreeProvider);
+            commands.newNote(item, fileService, pageTreeProvider, previewProvider);
         }),
         vscode.commands.registerCommand('knowledgeBase.newFolder', (item) => {
             commands.newFolder(item, fileService, pageTreeProvider);
@@ -85,15 +87,15 @@ export function activate(context: vscode.ExtensionContext) {
             commands.renameItem(item, fileService, pageTreeProvider);
         }),
 
-        // 编辑和预览命令
+        // 编辑和预览命令（统一走 Cora 自带预览，支持 Mermaid）
         vscode.commands.registerCommand('knowledgeBase.openPreview', (uri) => {
-            commands.openPreview(uri);
+            commands.openPreview(previewProvider, uri);
         }),
         vscode.commands.registerCommand('knowledgeBase.openEditor', (uri) => {
             commands.openEditor(uri);
         }),
         vscode.commands.registerCommand('knowledgeBase.togglePreviewEditor', () => {
-            commands.togglePreviewEditor();
+            commands.togglePreviewEditor(previewProvider);
         }),
         // 大纲命令
         vscode.commands.registerCommand('knowledgeBase.gotoHeading', (line) => {

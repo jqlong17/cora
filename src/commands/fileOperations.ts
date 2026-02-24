@@ -3,12 +3,14 @@ import * as path from 'path';
 import { FileService, FileItem } from '../services/fileService';
 import { PageTreeProvider } from '../providers/pageTreeProvider';
 import { generateNoteTitle, sanitizeFileName } from '../utils/markdownParser';
+import type { PreviewProvider } from '../providers/previewProvider';
 import { openPreview } from './editorCommands';
 
 export async function newNote(
     item: { item: FileItem } | undefined,
     fileService: FileService,
-    pageTreeProvider: PageTreeProvider
+    pageTreeProvider: PageTreeProvider,
+    previewProvider: PreviewProvider
 ): Promise<void> {
     // Determine the parent folder
     let parentUri: vscode.Uri;
@@ -49,7 +51,7 @@ export async function newNote(
     if (newUri) {
         pageTreeProvider.refresh();
         // Open the new file
-        await openPreview(newUri);
+        await openPreview(previewProvider, newUri);
         vscode.window.showInformationMessage(`已创建笔记: ${sanitizedName}`);
     } else {
         vscode.window.showErrorMessage('创建笔记失败');

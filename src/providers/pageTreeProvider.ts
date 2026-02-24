@@ -18,7 +18,7 @@ export class PageTreeItem extends vscode.TreeItem {
             this.iconPath = new vscode.ThemeIcon('file');
             const isMarkdown = /\.(md|markdown)$/i.test(item.name);
             this.command = isMarkdown
-                ? { command: 'vscode.openWith', title: '打开文件', arguments: [item.uri, 'vscode.markdown.preview.editor'] }
+                ? { command: 'knowledgeBase.openPreview', title: '打开预览', arguments: [item.uri] }
                 : { command: 'vscode.open', title: '打开文件', arguments: [item.uri] };
             this.contextValue = 'file';
        } else {

@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
+import type { PreviewProvider } from '../providers/previewProvider';
 
-export async function openPreview(uri?: vscode.Uri): Promise<void> {
+/** 使用 Cora 自带预览（含 Mermaid）打开文件 */
+export async function openPreview(
+    previewProvider: PreviewProvider,
+    uri?: vscode.Uri
+): Promise<void> {
     if (!uri) {
-        // Try to get from active editor
         const activeEditor = vscode.window.activeTextEditor;
         if (activeEditor) {
             uri = activeEditor.document.uri;
@@ -12,18 +15,7 @@ export async function openPreview(uri?: vscode.Uri): Promise<void> {
             return;
         }
     }
-
-    try {
-        // Open the markdown preview
-        await vscode.commands.executeCommand('markdown.showPreview', uri);
-    } catch (error) {
-        // If it's not a markdown file, just open it normally
-        const document = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(document, {
-            preview: true,
-            viewColumn: vscode.ViewColumn.One
-        });
-    }
+    await previewProvider.openPreview(uri);
 }
 
 export async function openEditor(uri?: vscode.Uri): Promise<void> {
@@ -63,22 +55,23 @@ export async function openEditor(uri?: vscode.Uri): Promise<void> {
     });
 }
 
-export async function togglePreviewEditor(): Promise<void> {
-    // Get active tab to check current state
+export async function togglePreviewEditor(
+    previewProvider: PreviewProvider
+): Promise<void> {
     const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
     if (!activeTab) {
         vscode.window.showWarningMessage('请先打开一个文件');
         return;
     }
 
-    // Check if current active editor is a text editor (editing mode)
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
-        // Currently in edit mode, switch to preview
-        await openPreview(activeEditor.document.uri);
+        await openPreview(previewProvider, activeEditor.document.uri);
     } else {
-        // Currently in preview mode or no editor, switch to edit
-        const uri = getUriFromTab(activeTab);
+        let uri = getUriFromTab(activeTab);
+        if (!uri && previewProvider.hasOpenPanel()) {
+            uri = previewProvider.getCurrentUri();
+        }
         if (uri) {
             await openEditor(uri);
         } else {
