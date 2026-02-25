@@ -1,6 +1,24 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { FileItem } from '../services/fileService';
+import type { PageTreeItem } from '../providers/pageTreeProvider';
+
+function getSelectedFileItems(
+    item: { item: FileItem } | undefined,
+    pageTreeView: vscode.TreeView<PageTreeItem> | undefined
+): FileItem[] {
+    const selected = pageTreeView?.selection?.length
+        ? pageTreeView.selection
+        : item?.item ? [{ item: item.item } as PageTreeItem] : [];
+    const fileItems: FileItem[] = [];
+    for (const node of selected) {
+        const fi = node?.item;
+        if (fi && fi.type === 'file') {
+            fileItems.push(fi);
+        }
+    }
+    return fileItems;
+}
 
 export async function revealInFinder(item: { item: FileItem }): Promise<void> {
     if (!item || !item.item) {
@@ -14,36 +32,49 @@ export async function revealInFinder(item: { item: FileItem }): Promise<void> {
     }
 }
 
-export async function copyPath(item: { item: FileItem }): Promise<void> {
-    if (!item || !item.item) {
+export async function copyPath(
+    item: { item: FileItem } | undefined,
+    pageTreeView?: vscode.TreeView<PageTreeItem>
+): Promise<void> {
+    const fileItems = getSelectedFileItems(item, pageTreeView);
+    if (fileItems.length === 0) {
         return;
     }
 
     try {
-        await vscode.env.clipboard.writeText(item.item.uri.fsPath);
-        vscode.window.showInformationMessage('已复制绝对路径到剪贴板');
+        const text = fileItems.map((fi) => fi.uri.fsPath).join('\n');
+        await vscode.env.clipboard.writeText(text);
+        vscode.window.showInformationMessage(
+            fileItems.length > 1 ? `已复制 ${fileItems.length} 个文件的绝对路径` : '已复制绝对路径到剪贴板'
+        );
     } catch (error) {
         vscode.window.showErrorMessage(`复制路径失败: ${error}`);
     }
 }
 
-export async function copyRelativePath(item: { item: FileItem }): Promise<void> {
-    if (!item || !item.item) {
+export async function copyRelativePath(
+    item: { item: FileItem } | undefined,
+    pageTreeView?: vscode.TreeView<PageTreeItem>
+): Promise<void> {
+    const fileItems = getSelectedFileItems(item, pageTreeView);
+    if (fileItems.length === 0) {
         return;
     }
 
     try {
-        const workspaceFolder = vscode.workspace.getWorkspaceFolder(item.item.uri);
-        if (!workspaceFolder) {
-            // 如果不在工作区中，复制文件名
-            await vscode.env.clipboard.writeText(item.item.name);
-            vscode.window.showInformationMessage('已复制文件名到剪贴板');
-            return;
+        const lines: string[] = [];
+        for (const fi of fileItems) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(fi.uri);
+            if (!workspaceFolder) {
+                lines.push(fi.name);
+            } else {
+                lines.push(path.relative(workspaceFolder.uri.fsPath, fi.uri.fsPath));
+            }
         }
-
-        const relativePath = path.relative(workspaceFolder.uri.fsPath, item.item.uri.fsPath);
-        await vscode.env.clipboard.writeText(relativePath);
-        vscode.window.showInformationMessage('已复制相对路径到剪贴板');
+        await vscode.env.clipboard.writeText(lines.join('\n'));
+        vscode.window.showInformationMessage(
+            fileItems.length > 1 ? `已复制 ${fileItems.length} 个文件的相对路径` : '已复制相对路径到剪贴板'
+        );
     } catch (error) {
         vscode.window.showErrorMessage(`复制相对路径失败: ${error}`);
     }

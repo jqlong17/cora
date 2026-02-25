@@ -3,6 +3,7 @@ import * as path from 'path';
 import { FileService, FileItem } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { FavoritesService } from '../services/favoritesService';
+import { isMarkdownFile } from '../utils/markdownParser';
 
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
@@ -73,28 +74,54 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             if (element !== undefined) return [];
             const uriStrings = this.favoritesService.getFavorites();
             const folders = this.fileService.getWorkspaceFolders();
-            const items: PageTreeItem[] = [];
+            const filterMode = this.configService.getFilterMode();
+            const markdownExtensions = this.configService.getMarkdownExtensions();
+            const sortOrder = this.configService.getSortOrder();
+            const withStat: { uri: vscode.Uri; name: string; mtime: number; ctime: number }[] = [];
             for (const uriStr of uriStrings) {
                 try {
                     const uri = vscode.Uri.parse(uriStr);
                     const stat = await vscode.workspace.fs.stat(uri);
                     const name = path.basename(uri.fsPath);
-                    const fileItem: FileItem = { uri, type: 'file', name };
-                    let descriptionOverride: string | undefined;
-                    if (folders.length >= 1) {
-                        const folder = folders.find(f => uriStr.startsWith(f.uri.toString()));
-                        if (folder) {
-                            const rel = path.relative(folder.uri.fsPath, uri.fsPath);
-                            if (rel !== name) descriptionOverride = rel;
-                        }
+                    if (filterMode === 'markdown' && !isMarkdownFile(name, markdownExtensions)) {
+                        continue;
                     }
-                    const treeItem = new PageTreeItem(fileItem, vscode.TreeItemCollapsibleState.None, descriptionOverride);
-                    treeItem.contextValue = 'file+favorite';
-                    treeItem.iconPath = new vscode.ThemeIcon('star-empty');
-                    items.push(treeItem);
+                    withStat.push({
+                        uri,
+                        name,
+                        mtime: stat.mtime,
+                        ctime: stat.ctime
+                    });
                 } catch {
                     // 文件已删除，跳过
                 }
+            }
+            withStat.sort((a, b) => {
+                switch (sortOrder) {
+                    case 'nameAsc': return a.name.localeCompare(b.name);
+                    case 'nameDesc': return b.name.localeCompare(a.name);
+                    case 'mtimeDesc': return b.mtime - a.mtime;
+                    case 'mtimeAsc': return a.mtime - b.mtime;
+                    case 'ctimeDesc': return b.ctime - a.ctime;
+                    case 'ctimeAsc': return a.ctime - b.ctime;
+                    default: return a.name.localeCompare(b.name);
+                }
+            });
+            const items: PageTreeItem[] = [];
+            for (const { uri, name } of withStat) {
+                const fileItem: FileItem = { uri, type: 'file', name };
+                let descriptionOverride: string | undefined;
+                if (folders.length >= 1) {
+                    const folder = folders.find(f => uri.fsPath.startsWith(f.uri.fsPath));
+                    if (folder) {
+                        const rel = path.relative(folder.uri.fsPath, uri.fsPath);
+                        if (rel !== name) descriptionOverride = rel;
+                    }
+                }
+                const treeItem = new PageTreeItem(fileItem, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                treeItem.contextValue = 'file+favorite';
+                treeItem.iconPath = new vscode.ThemeIcon('star-empty');
+                items.push(treeItem);
             }
             return items;
         }
@@ -103,7 +130,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             if (element !== undefined) {
                 return [];
             }
-            const items = await this.fileService.getAllMarkdownFilesSortedByConfig();
+            const items = await this.fileService.getAllFilesSortedByConfig();
             const folders = this.fileService.getWorkspaceFolders();
             return items.map((item: FileItem) => {
                 let descriptionOverride: string | undefined;

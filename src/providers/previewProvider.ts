@@ -334,7 +334,8 @@ export class PreviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' ${webview.cspSource}; img-src https: data: ${webview.cspSource}; connect-src https:;">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor (Marked)</title>
     <style>
         ${fontCss}
@@ -444,7 +445,8 @@ export class PreviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: data: ${webview.cspSource}; connect-src https:;">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
     <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson};</script>
     <style>

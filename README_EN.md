@@ -1,230 +1,265 @@
 # Cora
 
-A Notion-inspired knowledge management plugin for VS Code
+A Notion-inspired knowledge management extension for VS Code
 
 ## Why Cora?
 
-VS Code and Cursor's interfaces are designed for programming—file tree on the left, editor in the middle, AI chat on the right. This layout works well for coding, but it's not ideal for knowledge management.
+VS Code and Cursor are built for programming—file tree on the left, editor in the middle, AI chat on the right. That layout works well for code, but not for knowledge management.
 
-Notion excels at knowledge management: hierarchical pages, document outlines, full-text search. But it lacks VS Code's powerful editing capabilities and AI integration.
+Notion excels at knowledge management: hierarchical pages, document outlines, full-text search. But it lacks VS Code’s editing power and AI integration.
 
-Cora combines both:
+Cora brings both together:
 
-* 📁 **Page Tree** — Intuitive hierarchical organization like Notion
+* 📁 **Page Tree** — Hierarchical knowledge organization as intuitive as Notion
 
-* 📋 **Outline View** — One-click navigation through document structure with collapsible headings
+* 📋 **Outline View** — Navigate document structure at a glance, with collapsible headings
 
-* 🔍 **Full-text Search** — Multi-keyword search with intelligent fallback
+* 🔍 **Full-text Search** — Multi-keyword search with smart fallback
 
-* 📝 **Seamless Editing** — Edit/preview toggle while keeping VS Code's native experience
+* 📝 **Seamless Editing** — One-click switch between edit and preview, same VS Code experience
 
 ## Who is it for?
 
-* **Developers who are also knowledge workers** — One tool for both code and notes
+* **Developers who are also knowledge workers** — One tool for code and notes
 
-* **Non-technical knowledge workers** — Leverage AI-powered programming for more efficient knowledge management
+* **Non-technical knowledge workers** — Use AI-assisted workflows to manage knowledge more efficiently
 
 ## Use Cases
 
-| Scenario                 | Traditional Way         | Cora Way                                             |
-| ------------------------ | ----------------------- | ---------------------------------------------------- |
-| Organizing project docs  | Nested folder chaos     | Hierarchical page tree at a glance                   |
-| Reading long documents   | Scroll to find content  | Outline navigation, jump to target section instantly |
-| Finding notes            | Open files one by one   | Full-text search with keyword highlighting           |
-| Switching coding/writing | Two apps back and forth | One VS Code, two modes                               |
+| Scenario                 | Traditional way        | With Cora                                  |
+| ------------------------ | ---------------------- | ------------------------------------------ |
+| Organizing project docs  | Messy nested folders   | Clear hierarchical page tree                |
+| Reading long documents   | Endless scrolling      | Outline navigation, jump to any section     |
+| Finding notes            | Open files one by one  | Full-text search with highlighted matches   |
+| Switching code / writing | Toggling between apps  | One VS Code, two modes                      |
 
-## Core Design Philosophy
+## Core design
 
-Keep VS Code's editing power, add Notion's organizational capabilities.
+Keep VS Code’s editing, add Notion-style organization.
 
-* Add knowledge base view to the left panel, easily switch back to native file tree
+* Left panel gets a knowledge-base view; you can switch back to the default file tree anytime
 
-* Middle area still uses VS Code editor, preview/edit with one click
+* Center stays the VS Code editor, with one-click preview/edit
 
-* Right AI chat stays unchanged, seamlessly integrated with knowledge base
+* Right-hand AI chat is unchanged and works with the knowledge base
 
-## Features
+## Product features
 
-### 📄 Page Tree
+Below are Cora’s main workflows and UI, ordered from overview to core experience to nice-to-haves.
 
-* **Three View Modes**: Toolbar buttons switch between **Tree** (default, folder hierarchy), **Flat** (list by modification time, newest first), and **Favorites** (only favorited Markdown files)
+### 1. Overall layout
 
-* **Favorites**: In tree or flat view, hover or right-click an MD file to **Favorite** / **Unfavorite**; favorited files show a star icon; the Favorites view lists all favorited files
+Left: knowledge panel (**Page** tree, **Outline**, **Search**). Center: Markdown editing and preview. Right: AI chat. One workspace for organizing, reading, searching, and AI collaboration.
 
-* **Toolbar Order**: Tree → Flat → Favorites → Sort → Filter → Refresh → New file → New folder
+![Cora overall layout](docs/product-features/00-overview.png)
 
-* **File Tree View**: In tree mode, display complete file hierarchy from workspace root
+* **Left**: Page tree (tree / flat / favorites), document outline, full-text search
 
-* **Smart Filtering**: In tree mode, toggle between \[All Files] and \[Markdown Only]
+* **Center**: Preview and Markdown modes, with tables, external images, etc.
 
-* **Quick Actions**: New note, new folder, rename, delete
+* **Right**: AI chat and history, in sync with the current document
 
-* **File Operations**: Reveal in Finder, copy path, copy file
+### 2. Edit in preview (WYSIWYG)
 
-* **Expand/Collapse**: Expand all, collapse all
+Edit content directly in **Preview** mode—no need to switch to source. Change text, select passages, or send selections to AI, all in the same view (Typora-style).
 
-### 📋 Outline
+![Edit in preview](docs/product-features/07-preview-edit.png)
 
-* **Real-time Following**: Automatically follow the active editor/preview; outline updates as you edit (including Cora edit mode)
+* **Edit in preview**: Tab shows “(Edit)”; you can edit body text in the preview
 
-* **Tree Hierarchy**: H1→H2→H3 auto-builds parent-child relationships, expanded by default
+* **One-click switch**: Use **Preview** / **Markdown** to toggle between rendered view and source
 
-* **Quick Jump**: Click outline item to jump to position (works in both preview and edit mode)
+### 3. Add to Chat from selection
 
-* **Level Labels**: H1, H2, H3 text labels for heading levels, clean and clear
+In preview or Markdown mode, **select text** and click **Add to Chat** (or `⌘L`) to send that range as a “file + lines” reference into the right-hand AI chat—no copy-paste.
 
-### 🔍 Search
+![Add to Chat from selection](docs/product-features/04-add-to-chat.png)
 
-* **Full-text Search**: Search content across all Markdown files in workspace
+* **Select and send**: After Add to Chat, the conversation shows something like “project-plan.md (lines 6–8)”
 
-* **Multi-keyword**: Support `A B` format to search files containing all keywords
+* **Focused context**: The AI only sees the selected fragment, so questions and answers stay on topic
 
-* **Smart Fallback**: When AND search has no results, automatically fallback to OR search
+### 4. Multi-select and AI
 
-* **Match Statistics**: Show match count and preview text for each file
+In the page tree, **Shift / Command** to select multiple files; right-click to **copy absolute or relative paths** in bulk. Selected paths can be used as context in AI chat so the AI can read several notes at once.
 
-* **Result Sorting**: Automatically sort by match count
+![Multi-select and AI](docs/product-features/01-multi-select-chat.png)
 
-### 📝 Edit and Preview
+* **Multi-select and paths**: In tree or flat view, multi-select and copy paths; AI can reference multiple files
 
-* **Preview by Default**: Click Markdown file to open in preview mode, read rendered content directly
+* **Multi-doc workflow**: Select several documents for comparison, summarization, or cross-doc analysis
 
-* **One-click Toggle**: Preview/Markdown button in editor top-right to switch modes
+### 5. Live outline
 
-* **Outline Sync**: Outline remains visible and functional in preview mode
+The **Outline** panel on the left **parses** the current document’s headings (H1–H4) in real time and shows them in a tree you can expand/collapse. It updates when you switch documents or edit, so you can jump around long docs quickly.
 
-**Cursor vs VS Code**: In Cursor you get inline Preview/Markdown toggle buttons. In VS Code, if those buttons don’t appear, use `Cmd+Shift+V` (preview) and `Cmd+E` (edit), or the icons in the editor title bar.
+![Live outline](docs/product-features/05-outline-realtime.png)
 
-## Quick Start
+* **Level labels**: H1, H3, H4, etc., so structure is clear
 
-### Installation
+* **Click to jump**: Click an outline item to go to that position; stays in sync in both preview and edit
 
-1. Search for "Cora" in VS Code/Cursor extension marketplace
-2. Click Install
-3. After installation, the 📖 **Cora** icon appears in the left activity bar
+### 6. Multi-keyword search
 
-### Usage Guide
+The **Search** panel supports **multiple keywords** (space-separated). Press Enter to find Markdown files that **contain all** of them; if there are no AND results, it falls back to OR automatically.
 
-1. **Open Cora Panel**
+![Multi-keyword search](docs/product-features/08-multi-keyword-search.png)
 
-* Click the 📖 Cora icon in the left activity bar
+* **AND search**: e.g. “risk company” shows only notes that contain both
 
-* Or use shortcut `Cmd+Shift+P` and type "Cora"
+* **Match info**: Result list shows match count and a short preview for quick scanning
 
-2. **Browse Files (Page Tree)**
+### 7. Favorites
 
-* In the [Pages] tab, the default **Tree** view shows folder hierarchy; you can switch to **Flat** (by modification time) or **Favorites** (favorited files only)
+**Favorite** frequently used documents from the page tree; the toolbar has a **Favorites** view. In tree or flat view, hover or right-click to add/remove favorites; favorited items show a star.
 
-* Toolbar (left to right): Tree, Flat, Favorites, Sort, Filter, Refresh, New note, New folder; “Toggle flat/tree” to switch view; in tree view use \[All/Markdown] filter
+![Favorites](docs/product-features/03-favorites.png)
 
-* Hover or right-click an MD file to Favorite/Unfavorite; favorited items show a star icon
+* **Toolbar star**: One click to switch to Favorites view (only favorited files)
 
-* Right-click files for other operations
+* **Star on items**: Favorited MD/HTML files show a star in the list; you can unfavorite anytime
 
-3. **View Document Structure (Outline)**
+### 8. Mermaid in preview
 
-* Open any Markdown file
+In preview mode, **Mermaid** code blocks in Markdown are rendered as sequence diagrams, flowcharts, etc.—no need to export images.
 
-* Switch to \[Outline] tab to view document heading structure
+![Mermaid rendering](docs/product-features/02-mermaid-rendering.png)
 
-* Click heading items to jump to corresponding positions
+* **Sequence / flow**: e.g. login flow, exception branches; edits update the diagram
 
-* Support expand/collapse subheadings
+* **One-click switch**: Toggle between Preview and Markdown to compare code and diagram
 
-4. **Search Notes**
+### 9. Typography
 
-* Switch to \[Search] tab
+Preview and editor both support configurable **fonts** with clear mixed Latin/CJK. You can choose Cascadia Mono, Google Sans, IBM Plex Mono, Noto Sans SC, etc. in settings.
 
-* Click 🔍 **Search Notes** button
+![Font preview](docs/product-features/06-font-preview.png)
 
-* Enter keywords, support multi-keyword (space separated)
+* **Mixed script**: Poems, notes, etc. get consistent spacing and weight
 
-* View search results and click to open files
+* **Configurable**: `knowledgeBase.fontFamily`, size, etc. in VS Code settings
 
-5. **Edit and Preview**
+***
 
-* Click Markdown file → Opens in preview mode by default
+<br />
 
-* **Cursor**: Use the **Markdown** / **Preview** buttons in the editor area
+## Quick start
 
-* **VS Code**: If no inline buttons, use `Cmd+Shift+V` (preview), `Cmd+E` (edit), or the title bar icons
+### Install
 
-## Keyboard Shortcuts
+1. Search for “Cora” in the VS Code/Cursor extension marketplace  
+2. Click **Install**  
+3. After install, the 📖 **Cora** icon appears in the left activity bar  
 
-| Action                        | Shortcut      |
-| ----------------------------- | ------------- |
-| Open Markdown Preview         | `Cmd+Shift+V` |
-| Return to Editor from Preview | `Cmd+E`       |
+### Usage
 
-## Context Menu Features
+1. **Open the Cora panel**
 
-Right-click on files or folders in the page tree:
+   * Click the 📖 Cora icon in the left activity bar  
 
-* **New Note** - Create new Markdown file in current directory
+   * Or `Cmd+Shift+P` and type “Cora”  
 
-* **New Folder** - Create new folder in current directory
+2. **Browse files (page tree)**
 
-* **Favorite** / **Unfavorite** - Add or remove Markdown file from favorites (star icon on hover)
+   * In the **Pages** tab you see the workspace file tree: **Tree** (folder hierarchy), **Flat** (by modification time), or **Favorites** (favorited files only)  
 
-* **Rename** - Rename file/folder
+   * Toolbar left to right: Tree, Flat, Favorites, Sort, Filter, Refresh, New note, New folder. In tree mode you can filter by [All] or [Markdown only].  
 
-* **Delete** - Delete file/folder
+   * Hover or right-click an MD file to Favorite/Unfavorite; favorited items show a star.  
 
-* **Reveal in Finder** - Open system file manager
+   * Right-click for more actions.  
 
-* **Copy Absolute Path** - Copy full file path
+3. **Document structure (outline)**
 
-* **Copy Relative Path** - Copy path relative to workspace
+   * Open any Markdown file.  
 
-* **Copy File** - Create file copy (auto-named)
+   * Switch to the **Outline** tab to see heading structure.  
 
-## Search Tips
+   * Click a heading to jump to that position.  
 
-| Input                           | Description         | Result                                     |
-| ------------------------------- | ------------------- | ------------------------------------------ |
-| `project`                       | Single keyword      | All notes containing "project"             |
-| `project plan`                  | Multi-keyword (AND) | Notes containing both "project" and "plan" |
-| `project plan` (no AND results) | Smart fallback (OR) | Notes containing "project" or "plan"       |
+   * Headings can be expanded/collapsed.  
+
+4. **Search notes**
+
+   * Switch to the **Search** tab.  
+
+   * Click 🔍 **Search notes**.  
+
+   * Enter keywords (space-separated for multiple).  
+
+   * Open a result by clicking it.  
+
+5. **Edit and preview**
+
+   * Click a Markdown file → it opens in preview by default.  
+
+   * **Cursor**: Use **Markdown** / **Preview** at the top-right of the content area to switch.  
+
+   * **VS Code**: If those buttons aren’t there, use `Cmd+Shift+V` (preview), `Cmd+E` (edit), or the title bar icons.  
+
+## Context menu
+
+Right-click a file or folder in the page tree:
+
+* **New note** — New Markdown file in the current directory  
+
+* **New folder** — New folder in the current directory  
+
+* **Favorite** / **Unfavorite** — Add or remove from favorites (or use the star on hover)  
+
+* **Rename** — Rename file or folder  
+
+* **Delete** — Delete file or folder  
+
+* **Reveal in Finder** — Open in system file manager  
+
+* **Copy absolute path** — Copy full path  
+
+* **Copy relative path** — Copy path relative to workspace  
+
+* **Copy file** — Duplicate file (auto-named)  
+
+## Search tips
+
+| Input                | Meaning          | Result                                      |
+| -------------------- | ---------------- | ------------------------------------------- |
+| `project`            | Single keyword  | All notes containing “project”              |
+| `project plan`       | Multi (AND)     | Notes containing both “project” and “plan”  |
+| `project plan` (no AND hits) | Fallback (OR) | Notes containing “project” or “plan”       |
 
 ## Configuration
 
-Search for "knowledgeBase" in VS Code settings to configure:
+In VS Code settings, search for “knowledgeBase”:
 
-| Config                             | Type    | Default                        | Description                                             |
-| ---------------------------------- | ------- | ------------------------------ | ------------------------------------------------------- |
-| `knowledgeBase.filterMode`         | string  | `"markdown"`                   | Page tree file filter mode (tree view)                  |
-| `knowledgeBase.pageViewMode`       | string  | `"tree"`                       | Page view mode: `tree` (hierarchy), `flat` (by mtime), or `favorites` (favorites only) |
-| `knowledgeBase.markdownExtensions` | array   | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions                     |
-| `knowledgeBase.autoReveal`         | boolean | `true`                         | Auto reveal current file in page tree                   |
+| Setting                             | Type    | Default                          | Description                                                                 |
+| ----------------------------------- | ------- | -------------------------------- | --------------------------------------------------------------------------- |
+| `knowledgeBase.filterMode`          | string  | `"markdown"`                     | File filter in page tree (tree view)                                        |
+| `knowledgeBase.pageViewMode`        | string  | `"tree"`                         | Page view: `tree`, `flat` (by mtime), or `favorites`                        |
+| `knowledgeBase.markdownExtensions` | array   | `[".md", ".markdown", ".mdx"]`    | Treated as Markdown                                                         |
+| `knowledgeBase.autoReveal`          | boolean | `true`                           | Reveal the current file in the page tree when opening                       |
 
 ## Roadmap
 
-Planned features to be implemented by priority.
+Planned work, in rough priority order.
 
-### Basic Features
+### Basic
 
-* **MD normalization**: One-click Markdown standardization to fix common format issues in LLM-generated content, e.g.:
+* **MD normalization**: One-click cleanup of Markdown (e.g. spacing around bold/italic, table alignment, Mermaid syntax) for LLM-generated content.  
 
-  * Spacing around emphasis (bold/italic) markers
+### AI
 
-  * Table separator rows and alignment
+* **Skill generation**: Use AI to analyze a repo or selected code and produce reproducible Skill docs.  
 
-  * Mermaid code block syntax errors
-
-### AI Features
-
-* **Skill generation**: Use AI to analyze the whole repo or selected code and produce reproducible Skill documentation
-
-* **Architecture diagram**: Use AI to analyze repo code architecture and generate architecture diagrams (e.g. Mermaid)
+* **Architecture diagrams**: Use AI to summarize repo structure and output diagrams (e.g. Mermaid).  
 
 ## Languages
 
-* [简体中文](./README.md)
+* [简体中文](./README.md)  
 
-* [English](./README_EN.md)
+* [English](./README_EN.md)  
 
 ## License
 
-MIT
+MIT  
 
-Cora — Making knowledge management as efficient as coding.
+Cora — Make knowledge management as efficient as coding.

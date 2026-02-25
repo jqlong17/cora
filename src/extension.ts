@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
     const pageTreeView = vscode.window.createTreeView('pageTree', {
         treeDataProvider: pageTreeProvider,
         showCollapseAll: false,
-        canSelectMany: false
+        canSelectMany: true
     });
     const outlineTreeView = vscode.window.createTreeView('kbOutline', {
         treeDataProvider: outlineProvider,

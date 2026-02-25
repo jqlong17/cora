@@ -110,10 +110,10 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
             commands.revealInFinder(item);
         }),
         vscode.commands.registerCommand('knowledgeBase.copyPath', (item) => {
-            commands.copyPath(item);
+            commands.copyPath(item, c.pageTreeView);
         }),
         vscode.commands.registerCommand('knowledgeBase.copyRelativePath', (item) => {
-            commands.copyRelativePath(item);
+            commands.copyRelativePath(item, c.pageTreeView);
         }),
 
         // ── 搜索 ──

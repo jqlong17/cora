@@ -127,13 +127,15 @@ export class FileService {
     }
 
     /**
-     * 递归收集所有 Markdown 文件，按配置排序（平铺视图用）。
+     * 递归收集所有文件（按 filterMode 筛选：仅 MD 或全部），按配置排序。用于平铺视图。
+     * 树状、平铺、收藏共用同一套筛选与排序逻辑。
      */
-    async getAllMarkdownFilesSortedByConfig(): Promise<FileItem[]> {
+    async getAllFilesSortedByConfig(): Promise<FileItem[]> {
         const folders = this.getWorkspaceFolders();
         if (folders.length === 0) {
             return [];
         }
+        const filterMode = this.configService.getFilterMode();
         const markdownExtensions = this.configService.getMarkdownExtensions();
         const sortOrder = this.configService.getSortOrder();
         const collected: { uri: vscode.Uri; name: string; mtime: number; ctime: number }[] = [];
@@ -151,7 +153,10 @@ export class FileService {
                     }
                     if (entry.isDirectory()) {
                         await collectFromDir(fullPath);
-                    } else if (entry.isFile() && isMarkdownFile(entry.name, markdownExtensions)) {
+                    } else if (entry.isFile()) {
+                        if (filterMode === 'markdown' && !isMarkdownFile(entry.name, markdownExtensions)) {
+                            continue;
+                        }
                         try {
                             const stat = await fs.promises.stat(fullPath);
                             collected.push({
