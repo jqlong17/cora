@@ -28,9 +28,7 @@
     "知识管理",
     "cora"
   ],
-  "activationEvents": [
-    "onView:pageTree"
-  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -177,18 +175,23 @@
         "command": "knowledgeBase.clearSearch",
         "title": "清除搜索",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "knowledgeBase.setSortOrder",
+        "title": "排序",
+        "icon": "$(sort-precedence)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "knowledgeBase.openPreview",
-          "when": "editorLangId == markdown && !markdownPreviewFocus",
+          "when": "editorLangId == markdown && activeWebviewPanelId != 'coraPreview'",
           "group": "navigation@1"
         },
         {
           "command": "knowledgeBase.openEditor",
-          "when": "markdownPreviewFocus",
+          "when": "activeWebviewPanelId == 'coraPreview'",
           "group": "navigation@1"
         }
       ],
@@ -200,6 +203,11 @@
         },
         {
           "command": "knowledgeBase.togglePageView",
+          "when": "view == pageTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.setSortOrder",
           "when": "view == pageTree",
           "group": "navigation@1"
         },
@@ -339,6 +347,27 @@
           "type": "boolean",
           "default": false,
           "description": "为非 Markdown 文件显示大纲"
+        },
+        "knowledgeBase.sortOrder": {
+          "type": "string",
+          "default": "nameAsc",
+          "enum": [
+            "nameAsc",
+            "nameDesc",
+            "mtimeDesc",
+            "mtimeAsc",
+            "ctimeDesc",
+            "ctimeAsc"
+          ],
+          "enumDescriptions": [
+            "文件名 (A-Z)",
+            "文件名 (Z-A)",
+            "编辑时间 (从新到旧)",
+            "编辑时间 (从旧到新)",
+            "创建时间 (从新到旧)",
+            "创建时间 (从旧到新)"
+          ],
+          "description": "页面树的排序方式"
         }
       }
     },
@@ -353,7 +382,7 @@
         "command": "knowledgeBase.openEditor",
         "key": "cmd+e",
         "mac": "cmd+e",
-        "when": "markdownPreviewFocus"
+        "when": "activeWebviewPanelId == 'coraPreview'"
       }
     ]
   },

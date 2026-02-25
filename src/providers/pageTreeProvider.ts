@@ -21,7 +21,7 @@ export class PageTreeItem extends vscode.TreeItem {
                 ? { command: 'knowledgeBase.openPreview', title: '打开预览', arguments: [item.uri] }
                 : { command: 'vscode.open', title: '打开文件', arguments: [item.uri] };
             this.contextValue = 'file';
-       } else {
+        } else {
             this.iconPath = new vscode.ThemeIcon('folder');
             this.contextValue = 'folder';
         }
@@ -50,7 +50,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     constructor(
         private fileService: FileService,
         private configService: ConfigService
-    ) {}
+    ) { }
 
     setTreeView(treeView: vscode.TreeView<PageTreeItem>): void {
         this.treeView = treeView;
@@ -71,9 +71,9 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             if (element !== undefined) {
                 return [];
             }
-            const items = await this.fileService.getAllMarkdownFilesSortedByMtime();
+            const items = await this.fileService.getAllMarkdownFilesSortedByConfig();
             const folders = this.fileService.getWorkspaceFolders();
-            return items.map(item => {
+            return items.map((item: FileItem) => {
                 let descriptionOverride: string | undefined;
                 if (folders.length >= 1) {
                     const folder = folders.find(f => item.uri.fsPath.startsWith(f.uri.fsPath));

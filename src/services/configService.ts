@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FilterMode, PageViewMode, CONFIG_KEYS, DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
+import { FilterMode, PageViewMode, SortOrder, CONFIG_KEYS, DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
 
 export class ConfigService {
     private config: vscode.WorkspaceConfiguration;
@@ -42,5 +42,13 @@ export class ConfigService {
 
     getShowOutlineForNonMarkdown(): boolean {
         return this.config.get<boolean>(CONFIG_KEYS.SHOW_OUTLINE_FOR_NON_MARKDOWN, false);
+    }
+
+    getSortOrder(): SortOrder {
+        return this.config.get<SortOrder>(CONFIG_KEYS.SORT_ORDER, 'nameAsc');
+    }
+
+    async setSortOrder(order: SortOrder): Promise<void> {
+        await this.config.update(CONFIG_KEYS.SORT_ORDER, order, true);
     }
 }

@@ -11,7 +11,7 @@ export interface FileItem {
 }
 
 export class FileService {
-    constructor(private configService: ConfigService) {}
+    constructor(private configService: ConfigService) { }
 
     getWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
         return vscode.workspace.workspaceFolders || [];
@@ -41,19 +41,13 @@ export class FileService {
 
         try {
             const entries = await fs.promises.readdir(targetUri.fsPath, { withFileTypes: true });
-            const items: FileItem[] = [];
-
-            // Sort: directories first, then files (alphabetically within each group)
-            const sortedEntries = entries.sort((a, b) => {
-                if (a.isDirectory() && !b.isDirectory()) { return -1; }
-                if (!a.isDirectory() && b.isDirectory()) { return 1; }
-                return a.name.localeCompare(b.name);
-            });
-
+            const sortOrder = this.configService.getSortOrder();
             const filterMode = this.configService.getFilterMode();
             const markdownExtensions = this.configService.getMarkdownExtensions();
 
-            for (const entry of sortedEntries) {
+            const items: (FileItem & { mtime: number; ctime: number })[] = [];
+
+            for (const entry of entries) {
                 // Skip hidden files and folders
                 if (entry.name.startsWith('.')) {
                     continue;
@@ -63,11 +57,24 @@ export class FileService {
                 const entryUri = vscode.Uri.file(entryPath);
 
                 if (entry.isDirectory()) {
-                    items.push({
-                        uri: entryUri,
-                        type: 'directory',
-                        name: entry.name
-                    });
+                    try {
+                        const stat = await fs.promises.stat(entryPath);
+                        items.push({
+                            uri: entryUri,
+                            type: 'directory',
+                            name: entry.name,
+                            mtime: stat.mtimeMs,
+                            ctime: stat.birthtimeMs
+                        });
+                    } catch {
+                        items.push({
+                            uri: entryUri,
+                            type: 'directory',
+                            name: entry.name,
+                            mtime: 0,
+                            ctime: 0
+                        });
+                    }
                 } else if (entry.isFile()) {
                     // Apply filter
                     if (filterMode === 'markdown') {
@@ -75,13 +82,42 @@ export class FileService {
                             continue;
                         }
                     }
-                    items.push({
-                        uri: entryUri,
-                        type: 'file',
-                        name: entry.name
-                    });
+                    try {
+                        const stat = await fs.promises.stat(entryPath);
+                        items.push({
+                            uri: entryUri,
+                            type: 'file',
+                            name: entry.name,
+                            mtime: stat.mtimeMs,
+                            ctime: stat.birthtimeMs
+                        });
+                    } catch {
+                        items.push({
+                            uri: entryUri,
+                            type: 'file',
+                            name: entry.name,
+                            mtime: 0,
+                            ctime: 0
+                        });
+                    }
                 }
             }
+
+            // Sort: directories first, then files, then apply user sort order within each group
+            items.sort((a, b) => {
+                if (a.type === 'directory' && b.type !== 'directory') { return -1; }
+                if (a.type !== 'directory' && b.type === 'directory') { return 1; }
+
+                switch (sortOrder) {
+                    case 'nameAsc': return a.name.localeCompare(b.name);
+                    case 'nameDesc': return b.name.localeCompare(a.name);
+                    case 'mtimeDesc': return b.mtime - a.mtime;
+                    case 'mtimeAsc': return a.mtime - b.mtime;
+                    case 'ctimeDesc': return b.ctime - a.ctime;
+                    case 'ctimeAsc': return a.ctime - b.ctime;
+                    default: return a.name.localeCompare(b.name);
+                }
+            });
 
             return items;
         } catch (error) {
@@ -91,15 +127,16 @@ export class FileService {
     }
 
     /**
-     * 递归收集所有 Markdown 文件，按修改时间降序排列（平铺视图用）。
+     * 递归收集所有 Markdown 文件，按配置排序（平铺视图用）。
      */
-    async getAllMarkdownFilesSortedByMtime(): Promise<FileItem[]> {
+    async getAllMarkdownFilesSortedByConfig(): Promise<FileItem[]> {
         const folders = this.getWorkspaceFolders();
         if (folders.length === 0) {
             return [];
         }
         const markdownExtensions = this.configService.getMarkdownExtensions();
-        const collected: { uri: vscode.Uri; name: string; mtime: number }[] = [];
+        const sortOrder = this.configService.getSortOrder();
+        const collected: { uri: vscode.Uri; name: string; mtime: number; ctime: number }[] = [];
 
         const collectFromDir = async (dirPath: string): Promise<void> => {
             try {
@@ -120,7 +157,8 @@ export class FileService {
                             collected.push({
                                 uri: vscode.Uri.file(fullPath),
                                 name: entry.name,
-                                mtime: stat.mtimeMs
+                                mtime: stat.mtimeMs,
+                                ctime: stat.birthtimeMs
                             });
                         } catch {
                             // skip unreadable files
@@ -136,7 +174,18 @@ export class FileService {
             await collectFromDir(folder.uri.fsPath);
         }
 
-        collected.sort((a, b) => b.mtime - a.mtime);
+        collected.sort((a, b) => {
+            switch (sortOrder) {
+                case 'nameAsc': return a.name.localeCompare(b.name);
+                case 'nameDesc': return b.name.localeCompare(a.name);
+                case 'mtimeDesc': return b.mtime - a.mtime;
+                case 'mtimeAsc': return a.mtime - b.mtime;
+                case 'ctimeDesc': return b.ctime - a.ctime;
+                case 'ctimeAsc': return a.ctime - b.ctime;
+                default: return b.mtime - a.mtime;
+            }
+        });
+
         return collected.map(({ uri, name }) => ({
             uri,
             type: 'file' as const,

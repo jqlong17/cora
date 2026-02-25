@@ -1,42 +1,39 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import { marked } from 'marked';
 
 /**
- * 自定义 Markdown 预览提供者
- * 使用 Webview 实现预览功能，而非 VS Code 原生预览
+ * 自定义 Markdown 预览提供者 (Typora 实时编辑模式)
+ * 采用 Milkdown 引擎实现混合预览编辑体验
  */
 export class PreviewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private currentUri: vscode.Uri | undefined;
+    private saveTimeout: NodeJS.Timeout | undefined;
+    private lastSavedContent: string = '';
 
-    /** 编辑模式下保存（saveAndPreview）后调用，用于刷新大纲等 */
-    /** 编辑模式下内容变更时调用（防抖后），用于左侧大纲实时更新 */
     constructor(
         private context: vscode.ExtensionContext,
         private onDocumentSaved?: (uri: vscode.Uri) => void,
         private onContentChanged?: (uri: vscode.Uri, content: string) => void
-    ) {}
+    ) { }
 
     /**
-     * 打开预览面板（每次调用都切到 Preview 模式，不关心之前是否在编辑或其他文件）
+     * 打开预览面板
      */
     async openPreview(uri: vscode.Uri): Promise<void> {
         this.currentUri = uri;
         const fileName = uri.path.split('/').pop() || 'Preview';
 
-        // 如果面板已存在，一律更新为当前文件并前置显示
         if (this.panel) {
-            this.panel.title = `${fileName} (Preview)`;
+            this.panel.title = `${fileName} (Edit)`;
             await this.updatePreview();
             this.panel.reveal(vscode.ViewColumn.One);
             return;
         }
 
-        // 创建新的 Webview 面板
         this.panel = vscode.window.createWebviewPanel(
             'coraPreview',
-            `${fileName} (Preview)`,
+            `${fileName} (Edit)`,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -45,80 +42,61 @@ export class PreviewProvider {
             }
         );
 
-        // 监听面板关闭
         this.panel.onDidDispose(() => {
             this.panel = undefined;
         });
 
-        // 监听 webview 消息：全部在自有 webview 内切换，不调用 VS Code 编辑器
         this.panel.webview.onDidReceiveMessage(async (msg) => {
-            if (!this.panel || !this.currentUri) {
+            if (!this.panel || !this.currentUri) return;
+
+            if (msg.command === 'openEditor') {
+                console.log('[Cora] Webview requested switch to source for:', this.currentUri?.fsPath);
+                vscode.commands.executeCommand('knowledgeBase.openEditor', this.currentUri);
                 return;
             }
-            if (msg.command === 'openMarkdown') {
-                try {
-                    const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
-                    this.panel.webview.html = this.generateMarkdownEditorHtml(content, this.panel.webview);
-                    this.onContentChanged?.(this.currentUri, content);
-                } catch (e) {
-                    console.error(e);
-                }
-            } else if (msg.command === 'saveAndPreview' && typeof msg.content === 'string') {
-                try {
-                    await vscode.workspace.fs.writeFile(
-                        this.currentUri,
-                        new TextEncoder().encode(msg.content)
-                    );
-                    this.onDocumentSaved?.(this.currentUri);
-                    await this.updatePreview();
-                } catch (e) {
-                    console.error(e);
-                    this.panel.webview.html = this.getErrorHtml('保存失败');
-                }
-            } else if (msg.command === 'outlineUpdate' && typeof msg.content === 'string') {
+
+            if (msg.command === 'editorUpdate' && typeof msg.content === 'string') {
                 this.onContentChanged?.(this.currentUri, msg.content);
+
+                if (this.saveTimeout) clearTimeout(this.saveTimeout);
+                this.saveTimeout = setTimeout(async () => {
+                    if (this.currentUri && msg.content !== this.lastSavedContent) {
+                        try {
+                            await vscode.workspace.fs.writeFile(
+                                this.currentUri,
+                                new TextEncoder().encode(msg.content)
+                            );
+                            this.lastSavedContent = msg.content;
+                            // 注意：不建议在这里调用 onDocumentSaved 触发全量刷新，因为 Milkdown 会处理局部显示
+                        } catch (e) {
+                            console.error('Auto-save failed:', e);
+                        }
+                    }
+                }, 800);
             }
         });
 
-        // 初始加载内容
         await this.updatePreview();
     }
 
     /**
-     * 更新预览内容
+     * 更新内容
      */
     async updatePreview(): Promise<void> {
-        if (!this.panel || !this.currentUri) {
-            return;
-        }
+        if (!this.panel || !this.currentUri) return;
 
         try {
             const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
-            const html = this.generateHtml(content, this.currentUri, this.panel.webview);
-            this.panel.webview.html = html;
+            this.lastSavedContent = content;
+            this.panel.webview.html = this.generateHtml(content, this.currentUri, this.panel.webview);
         } catch (error) {
-            console.error('Error reading file for preview:', error);
-            this.panel.webview.html = this.getErrorHtml('无法读取文件内容');
+            console.error('Error loading editor:', error);
+            this.panel.webview.html = this.getErrorHtml('无法加载编辑器资源');
         }
     }
 
-    /**
-     * 获取当前预览的 URI
-     */
-    getCurrentUri(): vscode.Uri | undefined {
-        return this.currentUri;
-    }
-
-    /**
-     * 检查是否有打开的预览面板
-     */
-    hasOpenPanel(): boolean {
-        return this.panel !== undefined;
-    }
-
-    /**
-     * 关闭预览面板
-     */
+    getCurrentUri(): vscode.Uri | undefined { return this.currentUri; }
+    hasOpenPanel(): boolean { return this.panel !== undefined; }
     closePreview(): void {
         if (this.panel) {
             this.panel.dispose();
@@ -127,494 +105,187 @@ export class PreviewProvider {
     }
 
     /**
-     * 生成预览 HTML（含 Mermaid 渲染）
+     * 生成 Milkdown 集成 HTML
      */
     private generateHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
-        // 配置 marked
-        marked.setOptions({
-            gfm: true,
-            breaks: true
-        });
+        const extensionUri = this.context.extensionUri;
+        const editorJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor.js'));
+        const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
+        const bundleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'milkdown.bundle.js'));
 
-        // 转换 Markdown 为 HTML
-        const htmlContent = marked.parse(markdown);
+        const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
 
-        const mermaidScriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this.context.extensionUri, 'media', 'mermaid.min.js')
-        );
-
-        // 生成完整 HTML 页面；CSP 允许本地脚本与 Mermaid 内联 SVG
         return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' vscode-resource:; script-src 'unsafe-inline' vscode-resource:; img-src data: https:;">
-    <title>Preview</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; script-src 'unsafe-inline' https: vscode-resource: vscode-webview-resource:; img-src https: data: vscode-resource: vscode-webview-resource:; connect-src https:;">
+    <title>Cora Editor</title>
+    <script>window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html {
-            /* 始终保留滚动条槽位，防止内容高度变化时按钮位置偏移 */
-            scrollbar-gutter: stable;
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            font-size: 14px;
-            line-height: 1.6;
-            color: var(--vscode-foreground, #333);
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
             background: var(--vscode-editor-background, #fff);
+            color: var(--vscode-editor-foreground, #24292f);
             margin: 0;
-            padding: 0;
-            padding-top: 48px;
+            padding: 40px;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
         }
-        .cora-toolbar-wrap {
-            position: fixed;
-            top: 0;
-            right: 0;
-            z-index: 10;
-            padding: 12px 16px 8px;
-            display: flex;
-            justify-content: flex-end;
-            background: var(--vscode-editor-background, #fff);
-        }
-        .cora-content {
-            padding: 0 32px 24px;
+        #editor {
             max-width: 860px;
             margin: 0 auto;
+            min-height: 100vh;
         }
-
-        h1, h2, h3, h4, h5, h6 {
-            margin-top: 24px;
-            margin-bottom: 16px;
-            font-weight: 600;
-            line-height: 1.25;
-            color: var(--vscode-foreground, #24292e);
+        .milkdown {
+            box-shadow: none !important;
+            background: transparent !important;
+            font-size: 16px;
+            border: none !important;
+            outline: none !important;
         }
-
-        h1 {
-            font-size: 2em;
-            border-bottom: 1px solid var(--vscode-panel-border, #eaecef);
-            padding-bottom: 0.3em;
+        .milkdown .editor {
+            padding: 0 !important;
+            line-height: 1.8 !important;
+            outline: none !important;
+            border: none !important;
         }
-
-        h2 {
-            font-size: 1.5em;
-            border-bottom: 1px solid var(--vscode-panel-border, #eaecef);
-            padding-bottom: 0.3em;
+        .milkdown .editor:focus {
+            outline: none !important;
         }
-
-        h3 {
-            font-size: 1.25em;
-        }
-
-        h4 {
-            font-size: 1em;
-        }
-
-        p {
-            margin-bottom: 16px;
-        }
-
-        a {
-            color: var(--vscode-textLink-foreground, #0366d6);
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        ul, ol {
-            margin-bottom: 16px;
-            padding-left: 2em;
-        }
-
-        li {
-            margin-bottom: 0.25em;
-        }
-
-        code {
-            padding: 0.2em 0.4em;
-            margin: 0;
-            font-size: 85%;
-            background-color: var(--vscode-textCodeBlock-background, rgba(27, 31, 35, 0.05));
-            border-radius: 3px;
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-        }
-
-        pre {
-            margin-bottom: 16px;
-            padding: 16px;
-            overflow: auto;
-            font-size: 85%;
-            line-height: 1.45;
-            background-color: var(--vscode-textCodeBlock-background, #f6f8fa);
-            border-radius: 6px;
-        }
-
-        pre code {
-            padding: 0;
-            background-color: transparent;
-        }
-
-        blockquote {
-            margin-bottom: 16px;
-            padding: 0 1em;
-            color: var(--vscode-descriptionForeground, #6a737d);
-            border-left: 0.25em solid var(--vscode-panel-border, #dfe2e5);
-        }
-
-        img {
-            max-width: 100%;
-            box-sizing: content-box;
-        }
-
-        table {
-            display: block;
-            width: 100%;
-            overflow: auto;
-            margin-bottom: 16px;
+        /* 表格样式优化 - 偏向简约 */
+        .milkdown table {
             border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 6px 13px;
-            border: 1px solid var(--vscode-panel-border, #dfe2e5);
-        }
-
-        th {
-            font-weight: 600;
-            background-color: var(--vscode-editor-background, #fff);
-        }
-
-        tr:nth-child(2n) {
-            background-color: var(--vscode-list-hoverBackground, #f6f8fa);
-        }
-
-        hr {
-            height: 0.25em;
-            padding: 0;
+            width: 100%;
             margin: 24px 0;
-            background-color: var(--vscode-panel-border, #e1e4e8);
-            border: 0;
-        }
-
-        .task-list-item {
-            list-style-type: none;
-        }
-
-        .task-list-item input {
-            margin-right: 0.5em;
-        }
-
-        .mermaid {
-            margin: 16px 0;
-            text-align: center;
-        }
-        .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-
-        .preview-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 0;
-            border: 1px solid var(--vscode-panel-border, #e1e4e8);
-            border-radius: 3px;
-            width: fit-content;
-            overflow: hidden;
-        }
-        .preview-toolbar button {
-            margin: 0;
-            padding: 2px 10px;
-            font-size: 12px;
-            line-height: 1.4;
-            border: none;
-            background: var(--vscode-editor-inactiveSelectionBackground, transparent);
-            color: var(--vscode-foreground, #333);
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .preview-toolbar button:hover {
-            background: var(--vscode-list-hoverBackground, #f0f0f0);
-        }
-        .preview-toolbar button.active {
-            background: var(--vscode-button-background, #007acc);
-            color: var(--vscode-button-foreground, #fff);
-        }
-        .preview-toolbar button:not(:last-child) {
-            border-right: 1px solid var(--vscode-panel-border, #e1e4e8);
-        }
-    </style>
-</head>
-<body>
-    <div class="cora-toolbar-wrap">
-        <div class="preview-toolbar">
-            <button type="button" class="active" aria-pressed="true">预览</button>
-            <button type="button" id="btn-markdown" aria-pressed="false">编辑</button>
-        </div>
-    </div>
-    <div class="cora-content">
-    ${htmlContent}
-    </div>
-    <script src="${mermaidScriptUri}"></script>
-    <script>
-        (function() {
-            if (typeof mermaid === 'undefined') return;
-            mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
-            var blocks = document.querySelectorAll('pre code.language-mermaid');
-            if (blocks.length === 0) return;
-            blocks.forEach(function(block) {
-                var pre = block.closest('pre');
-                var div = document.createElement('div');
-                div.className = 'mermaid';
-                div.textContent = block.textContent;
-                pre.parentNode.replaceChild(div, pre);
-            });
-            mermaid.run({ querySelector: '.mermaid', suppressErrors: true }).catch(function(e) { console.error(e); });
-        })();
-        (function() {
-            var btn = document.getElementById('btn-markdown');
-            if (btn && typeof acquireVsCodeApi !== 'undefined') {
-                var vscode = acquireVsCodeApi();
-                btn.addEventListener('click', function() { vscode.postMessage({ command: 'openMarkdown' }); });
-            }
-        })();
-    </script>
-</body>
-</html>`;
-    }
-
-    /**
-     * 生成 Markdown 源码编辑视图（自有实现，不依赖 VS Code 编辑器）
-     */
-    private generateMarkdownEditorHtml(markdown: string, _webview: vscode.Webview): string {
-        const contentJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
-        return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
-    <title>编辑</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html {
-            /* 始终保留滚动条槽位，与预览模式宽度保持一致，防止按钮位置偏移 */
-            scrollbar-gutter: stable;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
             font-size: 14px;
-            color: var(--vscode-foreground, #333);
-            background: var(--vscode-editor-background, #fff);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding-top: 48px;
+            background: transparent !important;
         }
-        .cora-toolbar-wrap {
+        .milkdown th, .milkdown td {
+            border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
+            padding: 10px 14px;
+            text-align: left;
+            background: transparent !important;
+        }
+        .milkdown th {
+            font-weight: 600;
+        }
+
+        /* 顶部工具栏 - 独立固定高度 */
+        .top-bar {
             position: fixed;
-            top: 0;
-            right: 0;
-            z-index: 10;
-            padding: 12px 16px 8px;
-            display: flex;
-            justify-content: flex-end;
-            background: var(--vscode-editor-background, #fff);
-        }
-        .preview-toolbar {
-            display: flex;
-            gap: 0;
-            border: 1px solid var(--vscode-panel-border, #e1e4e8);
-            border-radius: 3px;
-            width: fit-content;
-            overflow: hidden;
-        }
-        .preview-toolbar button {
-            margin: 0;
-            padding: 2px 10px;
-            font-size: 12px;
-            line-height: 1.4;
-            border: none;
-            background: var(--vscode-editor-inactiveSelectionBackground, transparent);
-            color: var(--vscode-foreground, #333);
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .preview-toolbar button:hover {
-            background: var(--vscode-list-hoverBackground, #f0f0f0);
-        }
-        .preview-toolbar button.active {
-            background: var(--vscode-button-background, #007acc);
-            color: var(--vscode-button-foreground, #fff);
-        }
-        .preview-toolbar button:not(:last-child) {
-            border-right: 1px solid var(--vscode-panel-border, #e1e4e8);
-        }
-        .cora-content {
-            flex: 1;
-            padding: 0;
-            max-width: none;
-            margin: 0;
-            width: 100%;
-            min-height: 0;
-        }
-        .cora-editor-area {
-            display: flex;
-            width: 100%;
-            height: 100%;
-            min-height: 300px;
-            border: none;
-            border-top: 1px solid var(--vscode-panel-border, #e1e4e8);
-            border-radius: 0;
-            overflow: hidden;
-        }
-        .cora-editor-line-numbers {
-            width: 3em;
-            flex-shrink: 0;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding: 12px 8px 12px 12px;
-            scrollbar-width: none;
-        }
-        .cora-editor-line-numbers::-webkit-scrollbar {
-            display: none;
-        }
-        .cora-editor-line-numbers {
-            font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            text-align: right;
-            color: var(--vscode-descriptionForeground, #6a737d);
-            opacity: 0.65;
-            user-select: none;
-            background: var(--vscode-editor-background, #fff);
-        }
-        #line-numbers-inner {
-            min-height: 100%;
-        }
-        .cora-editor-wrap {
-            flex: 1;
-            min-width: 0;
-            position: relative;
-        }
-        #md-editor {
-            position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            bottom: 0;
+            height: 48px;
+            background: var(--vscode-editor-background, #fff);
+            border-bottom: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.08));
+            display: flex;
+            align-items: center;
+            justify-content: center; /* 居中或居右均可，这里选择居右对齐图标感 */
+            padding: 0 20px;
+            z-index: 1001;
+        }
+
+        /* 选项卡切换器 - 固定宽度与位置 */
+        .mode-switch-wrapper {
+            position: absolute;
+            right: 40px;
+            display: flex;
+            background: #eee;
+            border-radius: 4px;
+            padding: 2px;
+            gap: 2px;
+            user-select: none;
+        }
+        .mode-tab {
+            padding: 3px 12px;
+            font-size: 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #666;
+            min-width: 40px;
+            text-align: center;
+        }
+        .mode-tab.active {
+            background: #7d5aff;
+            color: #fff;
+        }
+        .mode-tab:not(.active):hover {
+            background: #e0e0e0;
+        }
+
+        /* 内容区域 */
+        .content-area {
+            margin-top: 48px;
+            height: calc(100vh - 48px);
+            overflow: auto;
+        }
+        
+        #source-editor-container {
             width: 100%;
             height: 100%;
-            padding: 12px 16px 12px 12px;
-            font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            color: var(--vscode-editor-foreground, #333);
-            background: var(--vscode-editor-background, #fff);
-            border: none;
-            resize: none;
-            tab-size: 4;
+            display: none;
+            background: var(--vscode-editor-background);
         }
-        #md-editor:focus {
+        
+        #source-textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
             outline: none;
+            padding: 40px;
+            font-family: var(--vscode-editor-font-family, "Fira Code", monospace);
+            font-size: var(--vscode-editor-font-size, 14px);
+            background: transparent;
+            color: var(--vscode-editor-foreground);
+            resize: none;
+            line-height: 1.6;
+        }
+
+        /* 强力隐藏 */
+        .mermaid-src-hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <div class="cora-toolbar-wrap">
-        <div class="preview-toolbar">
-            <button type="button" id="btn-preview" aria-pressed="false">预览</button>
-            <button type="button" class="active" aria-pressed="true">编辑</button>
+    <div class="top-bar">
+        <div class="mode-switch-wrapper">
+            <div id="tab-visual" class="mode-tab active" onclick="switchToVisual()">预览</div>
+            <div id="tab-source" class="mode-tab" onclick="switchToSource()">编辑</div>
         </div>
     </div>
-    <div class="cora-content">
-        <div class="cora-editor-area">
-            <div class="cora-editor-line-numbers" id="line-numbers"><div id="line-numbers-inner">1</div></div>
-            <div class="cora-editor-wrap">
-                <textarea id="md-editor" spellcheck="false" placeholder="Markdown 源码…"></textarea>
-            </div>
+    
+    <div class="content-area">
+        <div id="visual-editor-container">
+            <div id="editor"></div>
+        </div>
+        <div id="source-editor-container">
+            <textarea id="source-textarea" spellcheck="false"></textarea>
         </div>
     </div>
-    <script type="application/json" id="initial-content">${contentJson}</script>
-    <script>
-        (function() {
-            var el = document.getElementById('initial-content');
-            var ta = document.getElementById('md-editor');
-            var ln = document.getElementById('line-numbers');
-            var lnInner = document.getElementById('line-numbers-inner');
-            if (el && ta) {
-                try { ta.value = JSON.parse(el.textContent); } catch (e) {}
-            }
-            function countLines(str) {
-                if (!str) return 1;
-                var n = 1;
-                for (var i = 0; i < str.length; i++) { if (str.charAt(i) === '\\n') n++; }
-                return n;
-            }
-            function updateLineNumbers() {
-                var n = countLines(ta ? ta.value : '');
-                var s = '';
-                for (var i = 1; i <= n; i++) { s += i + '\\n'; }
-                if (lnInner) lnInner.textContent = s || '1';
-            }
-            updateLineNumbers();
-            if (ta) {
-                ta.addEventListener('input', updateLineNumbers);
-                ta.addEventListener('scroll', function() { if (ln) ln.scrollTop = ta.scrollTop; });
-            }
-            var btn = document.getElementById('btn-preview');
-            var vscodeApi = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
-            if (btn && vscodeApi) {
-                btn.addEventListener('click', function() {
-                    vscodeApi.postMessage({ command: 'saveAndPreview', content: ta ? ta.value : '' });
-                });
-            }
-            if (ta && vscodeApi) {
-                var outlineTimer = null;
-                ta.addEventListener('input', function() {
-                    if (outlineTimer) clearTimeout(outlineTimer);
-                    outlineTimer = setTimeout(function() {
-                        outlineTimer = null;
-                        vscodeApi.postMessage({ command: 'outlineUpdate', content: ta.value });
-                    }, 250);
-                });
-            }
-        })();
-    </script>
+
+    <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
+    <script type="module" src="${editorJsUri}"></script>
 </body>
 </html>`;
     }
 
-    /**
-     * 错误页面 HTML
-     */
     private getErrorHtml(message: string): string {
         return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Preview Error</title>
+    <title>Error</title>
     <style>
-        body {
-            font-family: sans-serif;
-            padding: 40px;
-            text-align: center;
-            color: var(--vscode-foreground, #333);
-        }
+        body { font-family: sans-serif; padding: 40px; text-align: center; color: var(--vscode-foreground); }
     </style>
 </head>
-<body>
-    <h2>⚠️ ${message}</h2>
-</body>
+<body><h2>⚠️ ${message}</h2></body>
 </html>`;
     }
 }

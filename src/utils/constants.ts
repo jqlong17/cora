@@ -6,13 +6,15 @@ export const CONFIG_KEYS = {
     MARKDOWN_EXTENSIONS: 'markdownExtensions',
     PREVIEW_ON_CLICK: 'previewOnClick',
     AUTO_REVEAL: 'autoReveal',
-    SHOW_OUTLINE_FOR_NON_MARKDOWN: 'showOutlineForNonMarkdown'
+    SHOW_OUTLINE_FOR_NON_MARKDOWN: 'showOutlineForNonMarkdown',
+    SORT_ORDER: 'sortOrder'
 } as const;
 
 export const COMMANDS = {
     REFRESH_PAGE_TREE: `${EXTENSION_NAME}.refreshPageTree`,
     TOGGLE_FILTER: `${EXTENSION_NAME}.toggleFilter`,
     TOGGLE_PAGE_VIEW: `${EXTENSION_NAME}.togglePageView`,
+    SET_SORT_ORDER: `${EXTENSION_NAME}.setSortOrder`,
     SHOW_ALL_FILES: `${EXTENSION_NAME}.showAllFiles`,
     SHOW_MARKDOWN_ONLY: `${EXTENSION_NAME}.showMarkdownOnly`,
     OPEN_PREVIEW: `${EXTENSION_NAME}.openPreview`,
@@ -39,6 +41,14 @@ export const HEADING_REGEX = /^(#{1,6})\s+(.+)$/gm;
 export type FilterMode = 'all' | 'markdown';
 
 export type PageViewMode = 'flat' | 'tree';
+
+export type SortOrder =
+    | 'nameAsc'         // 文件名 (A-Z)
+    | 'nameDesc'        // 文件名 (Z-A)
+    | 'mtimeDesc'       // 编辑时间 (从新到旧)
+    | 'mtimeAsc'        // 编辑时间 (从旧到新)
+    | 'ctimeDesc'       // 创建时间 (从新到旧)
+    | 'ctimeAsc';       // 创建时间 (从旧到新)
 
 export interface Heading {
     level: number;
