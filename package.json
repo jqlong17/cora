@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "VS Code 知识管理插件 - 提供页面树、大纲导航、数据库视图等知识管理功能",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -405,8 +405,9 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "vscode:prepublish": "npm run bundle -- --minify",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
@@ -422,6 +423,7 @@
     "@typescript-eslint/eslint-plugin": "^7.14.0",
     "@typescript-eslint/parser": "^7.14.0",
     "@vscode/test-electron": "^2.3.9",
+    "esbuild": "^0.27.3",
     "eslint": "^8.57.0",
     "glob": "^10.3.10",
     "mocha": "^10.3.0",
