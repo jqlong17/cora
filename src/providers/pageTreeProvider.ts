@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { FileService, FileItem } from '../services/fileService';
 import { ConfigService } from '../services/configService';
+import { FavoritesService } from '../services/favoritesService';
 
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
@@ -49,7 +50,8 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
 
     constructor(
         private fileService: FileService,
-        private configService: ConfigService
+        private configService: ConfigService,
+        private favoritesService?: FavoritesService
     ) { }
 
     setTreeView(treeView: vscode.TreeView<PageTreeItem>): void {
@@ -66,6 +68,36 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
 
     async getChildren(element?: PageTreeItem): Promise<PageTreeItem[]> {
         const pageViewMode = this.configService.getPageViewMode();
+
+        if (pageViewMode === 'favorites' && this.favoritesService) {
+            if (element !== undefined) return [];
+            const uriStrings = this.favoritesService.getFavorites();
+            const folders = this.fileService.getWorkspaceFolders();
+            const items: PageTreeItem[] = [];
+            for (const uriStr of uriStrings) {
+                try {
+                    const uri = vscode.Uri.parse(uriStr);
+                    const stat = await vscode.workspace.fs.stat(uri);
+                    const name = path.basename(uri.fsPath);
+                    const fileItem: FileItem = { uri, type: 'file', name };
+                    let descriptionOverride: string | undefined;
+                    if (folders.length >= 1) {
+                        const folder = folders.find(f => uriStr.startsWith(f.uri.toString()));
+                        if (folder) {
+                            const rel = path.relative(folder.uri.fsPath, uri.fsPath);
+                            if (rel !== name) descriptionOverride = rel;
+                        }
+                    }
+                    const treeItem = new PageTreeItem(fileItem, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                    treeItem.contextValue = 'file+favorite';
+                    treeItem.iconPath = new vscode.ThemeIcon('star-empty');
+                    items.push(treeItem);
+                } catch {
+                    // 文件已删除，跳过
+                }
+            }
+            return items;
+        }
 
         if (pageViewMode === 'flat') {
             if (element !== undefined) {
@@ -84,7 +116,12 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
                         }
                     }
                 }
-                return new PageTreeItem(item, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                const treeItem = new PageTreeItem(item, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                if (this.favoritesService?.isFavorite(item.uri)) {
+                    treeItem.contextValue = 'file+favorite';
+                    treeItem.iconPath = new vscode.ThemeIcon('star-empty');
+                }
+                return treeItem;
             });
         }
 
@@ -93,12 +130,18 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             const collapsibleState = item.type === 'directory'
                 ? vscode.TreeItemCollapsibleState.Collapsed
                 : vscode.TreeItemCollapsibleState.None;
-            return new PageTreeItem(item, collapsibleState);
+            const treeItem = new PageTreeItem(item, collapsibleState);
+            if (item.type === 'file' && this.favoritesService?.isFavorite(item.uri)) {
+                treeItem.contextValue = 'file+favorite';
+                treeItem.iconPath = new vscode.ThemeIcon('star-empty');
+            }
+            return treeItem;
         });
     }
 
     async getParent(element: PageTreeItem): Promise<PageTreeItem | null> {
-        if (this.configService.getPageViewMode() === 'flat') {
+        const mode = this.configService.getPageViewMode();
+        if (mode === 'flat' || mode === 'favorites') {
             return null;
         }
         const parentPath = element.item.uri.fsPath.split('/').slice(0, -1).join('/');

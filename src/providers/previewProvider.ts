@@ -342,7 +342,7 @@ export class PreviewProvider {
         .top-bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--vscode-editor-background, #fff); border-bottom: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.08)); display: flex; align-items: center; justify-content: center; padding: 0 20px; z-index: 1001; }
         .mode-switch-wrapper { position: absolute; right: 40px; display: flex; background: #eee; border-radius: 4px; padding: 2px; gap: 2px; user-select: none; }
         .mode-tab { padding: 3px 12px; font-size: 12px; border-radius: 3px; cursor: pointer; transition: all 0.2s ease; color: #666; min-width: 40px; text-align: center; }
-        .mode-tab.active { background: #7d5aff; color: #fff; }
+        .mode-tab.active { background: #1a00ff; color: #fff; }
         .mode-tab:not(.active):hover { background: #e0e0e0; }
         .content-area { margin-top: 48px; height: calc(100vh - 48px); overflow: auto; }
         #marked-preview { max-width: 860px; margin: 0 auto; padding: 20px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; line-height: ${lineHeightPreview} !important; }
@@ -571,7 +571,7 @@ export class PreviewProvider {
             text-align: center;
         }
         .mode-tab.active {
-            background: #7d5aff;
+            background: #1a00ff;
             color: #fff;
         }
         .mode-tab:not(.active):hover {

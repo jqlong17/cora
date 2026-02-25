@@ -4,6 +4,7 @@ import { OutlineProvider } from './providers/outlineProvider';
 import { PreviewProvider } from './providers/previewProvider';
 import { SearchProvider } from './providers/searchProvider';
 import { FileService } from './services/fileService';
+import { FavoritesService } from './services/favoritesService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
 import { registerCommands, ServiceContainer } from './commands/registerCommands';
@@ -15,10 +16,11 @@ export function activate(context: vscode.ExtensionContext) {
     // ── 1. 初始化服务 ──
     const configService = new ConfigService();
     const fileService = new FileService(configService);
+    const favoritesService = new FavoritesService(context.workspaceState);
     const outlineService = new OutlineService();
 
     // ── 2. 初始化数据提供器 ──
-    const pageTreeProvider = new PageTreeProvider(fileService, configService);
+    const pageTreeProvider = new PageTreeProvider(fileService, configService, favoritesService);
     const outlineProvider = new OutlineProvider(outlineService, configService);
     const previewProvider = new PreviewProvider(
         context,
@@ -57,6 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
     const container: ServiceContainer = {
         configService,
         fileService,
+        favoritesService,
         pageTreeProvider,
         outlineProvider,
         previewProvider,

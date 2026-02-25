@@ -10,10 +10,16 @@ export const CONFIG_KEYS = {
     SORT_ORDER: 'sortOrder'
 } as const;
 
+export const WORKSPACE_STATE_KEYS = {
+    FAVORITES: 'knowledgeBase.favorites', // string[] of URI strings
+} as const;
+
 export const COMMANDS = {
     REFRESH_PAGE_TREE: `${EXTENSION_NAME}.refreshPageTree`,
     TOGGLE_FILTER: `${EXTENSION_NAME}.toggleFilter`,
     TOGGLE_PAGE_VIEW: `${EXTENSION_NAME}.togglePageView`,
+    SET_PAGE_VIEW_MODE: `${EXTENSION_NAME}.setPageViewMode`,
+    TOGGLE_FAVORITE: `${EXTENSION_NAME}.toggleFavorite`,
     SET_SORT_ORDER: `${EXTENSION_NAME}.setSortOrder`,
     SHOW_ALL_FILES: `${EXTENSION_NAME}.showAllFiles`,
     SHOW_MARKDOWN_ONLY: `${EXTENSION_NAME}.showMarkdownOnly`,
@@ -40,7 +46,7 @@ export const HEADING_REGEX = /^(#{1,6})\s+(.+)$/gm;
 
 export type FilterMode = 'all' | 'markdown';
 
-export type PageViewMode = 'flat' | 'tree';
+export type PageViewMode = 'flat' | 'tree' | 'favorites';
 
 export type SortOrder =
     | 'nameAsc'         // 文件名 (A-Z)

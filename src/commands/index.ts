@@ -1,5 +1,7 @@
 export * from './toggleFilter';
 export * from './togglePageView';
+export * from './setPageViewMode';
+export * from './toggleFavorite';
 export * from './fileOperations';
 export * from './editorCommands';
 export * from './navigationCommands';

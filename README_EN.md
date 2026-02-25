@@ -47,7 +47,11 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 ### 📄 Page Tree
 
-* **Flat/Tree Toggle**: By default, files are shown in a folder hierarchy tree; you can switch to a flat list sorted by modification time (newest first)
+* **Three View Modes**: Toolbar buttons switch between **Tree** (default, folder hierarchy), **Flat** (list by modification time, newest first), and **Favorites** (only favorited Markdown files)
+
+* **Favorites**: In tree or flat view, hover or right-click an MD file to **Favorite** / **Unfavorite**; favorited files show a star icon; the Favorites view lists all favorited files
+
+* **Toolbar Order**: Tree → Flat → Favorites → Sort → Filter → Refresh → New file → New folder
 
 * **File Tree View**: In tree mode, display complete file hierarchy from workspace root
 
@@ -107,15 +111,17 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 * Or use shortcut `Cmd+Shift+P` and type "Cora"
 
-1. **Browse Files (Page Tree)**
+2. **Browse Files (Page Tree)**
 
-* In the [Pages] tab, the default **tree** view shows folder hierarchy; you can switch to flat view sorted by modification time
+* In the [Pages] tab, the default **Tree** view shows folder hierarchy; you can switch to **Flat** (by modification time) or **Favorites** (favorited files only)
 
-* Toolbar: **New note**, **New folder**; “Toggle flat/tree” to switch view; in tree view use \[All/Markdown] filter
+* Toolbar (left to right): Tree, Flat, Favorites, Sort, Filter, Refresh, New note, New folder; “Toggle flat/tree” to switch view; in tree view use \[All/Markdown] filter
 
-* Right-click files for various operations
+* Hover or right-click an MD file to Favorite/Unfavorite; favorited items show a star icon
 
-1. **View Document Structure (Outline)**
+* Right-click files for other operations
+
+3. **View Document Structure (Outline)**
 
 * Open any Markdown file
 
@@ -125,7 +131,7 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 * Support expand/collapse subheadings
 
-1. **Search Notes**
+4. **Search Notes**
 
 * Switch to \[Search] tab
 
@@ -135,7 +141,7 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 
 * View search results and click to open files
 
-1. **Edit and Preview**
+5. **Edit and Preview**
 
 * Click Markdown file → Opens in preview mode by default
 
@@ -157,6 +163,8 @@ Right-click on files or folders in the page tree:
 * **New Note** - Create new Markdown file in current directory
 
 * **New Folder** - Create new folder in current directory
+
+* **Favorite** / **Unfavorite** - Add or remove Markdown file from favorites (star icon on hover)
 
 * **Rename** - Rename file/folder
 
@@ -185,7 +193,7 @@ Search for "knowledgeBase" in VS Code settings to configure:
 | Config                             | Type    | Default                        | Description                                             |
 | ---------------------------------- | ------- | ------------------------------ | ------------------------------------------------------- |
 | `knowledgeBase.filterMode`         | string  | `"markdown"`                   | Page tree file filter mode (tree view)                  |
-| `knowledgeBase.pageViewMode`       | string  | `"tree"`                       | Page view mode: `tree` (hierarchy) or `flat` (by mtime) |
+| `knowledgeBase.pageViewMode`       | string  | `"tree"`                       | Page view mode: `tree` (hierarchy), `flat` (by mtime), or `favorites` (favorites only) |
 | `knowledgeBase.markdownExtensions` | array   | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions                     |
 | `knowledgeBase.autoReveal`         | boolean | `true`                         | Auto reveal current file in page tree                   |
 
@@ -194,8 +202,6 @@ Search for "knowledgeBase" in VS Code settings to configure:
 Planned features to be implemented by priority.
 
 ### Basic Features
-
-* **Flat view**: Page module will support a flat view of all Markdown files, sorted by modification time (newest first), for quick browsing and navigation
 
 * **MD normalization**: One-click Markdown standardization to fix common format issues in LLM-generated content, e.g.:
 

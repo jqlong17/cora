@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { FileService } from '../../services/fileService';
 import { ConfigService } from '../../services/configService';
+import { FavoritesService } from '../../services/favoritesService';
 import { PageTreeProvider } from '../../providers/pageTreeProvider';
 import { SearchProvider, SearchItem } from '../../providers/searchProvider';
 import { OutlineProvider, OutlineItem } from '../../providers/outlineProvider';
@@ -23,6 +24,7 @@ suite('Cora E2E Test Suite', () => {
     const testWorkspacePath = path.resolve(__dirname, '../../../test-workspace');
     let fileService: FileService;
     let configService: ConfigService;
+    let favoritesService: FavoritesService;
     let pageTreeProvider: PageTreeProvider;
     let searchProvider: SearchProvider;
     let outlineService: OutlineService;
@@ -263,7 +265,21 @@ suite('Cora E2E Test Suite', () => {
         // 初始化服务
         configService = new ConfigService();
         fileService = new FileService(configService);
-        pageTreeProvider = new PageTreeProvider(fileService, configService);
+        const store: Record<string, unknown> = {};
+        const mockMemento: vscode.Memento = {
+            get<T>(key: string, defaultValue?: T): T | undefined {
+                return (key in store ? store[key] : defaultValue) as T | undefined;
+            },
+            update(key: string, value: unknown): Thenable<void> {
+                store[key] = value;
+                return Promise.resolve();
+            },
+            keys(): readonly string[] {
+                return Object.keys(store);
+            }
+        };
+        favoritesService = new FavoritesService(mockMemento);
+        pageTreeProvider = new PageTreeProvider(fileService, configService, favoritesService);
         searchProvider = new SearchProvider(fileService, configService);
         outlineService = new OutlineService();
         outlineProvider = new OutlineProvider(outlineService, configService);
@@ -305,6 +321,10 @@ suite('Cora E2E Test Suite', () => {
                 'knowledgeBase.refreshPageTree',
                 'knowledgeBase.toggleFilter',
                 'knowledgeBase.togglePageView',
+                'knowledgeBase.setPageViewModeTree',
+                'knowledgeBase.setPageViewModeFlat',
+                'knowledgeBase.setPageViewModeFavorites',
+                'knowledgeBase.toggleFavorite',
                 'knowledgeBase.setSortOrder',
                 'knowledgeBase.showAllFiles',
                 'knowledgeBase.showMarkdownOnly',
@@ -394,6 +414,64 @@ suite('Cora E2E Test Suite', () => {
             if (isTestWorkspace && children.length >= 7) {
                 assert.strictEqual(first.label, '周报-02.md', 'In test workspace, first in flat view should be most recent (周报-02.md)');
             }
+        });
+
+        test('favorites view: empty when no favorites', async function() {
+            if (!vscode.workspace.workspaceFolders?.length) {
+                this.skip();
+                return;
+            }
+            await configService.setPageViewMode('favorites');
+            pageTreeProvider.refresh();
+            const children = await pageTreeProvider.getChildren();
+            assert.ok(Array.isArray(children), 'Favorites view should return array');
+            assert.strictEqual(children.length, 0, 'Favorites view should be empty when no favorites');
+            await configService.setPageViewMode('tree');
+            pageTreeProvider.refresh();
+        });
+
+        test('favorites view: shows favorited file after addFavorite and refresh', async function() {
+            if (!vscode.workspace.workspaceFolders?.length) {
+                this.skip();
+                return;
+            }
+            const mdPath = path.join(testWorkspacePath, '项目计划.md');
+            const uri = vscode.Uri.file(mdPath);
+            await favoritesService.addFavorite(uri);
+            pageTreeProvider.refresh();
+            await configService.setPageViewMode('favorites');
+            pageTreeProvider.refresh();
+            const children = await pageTreeProvider.getChildren();
+            assert.ok(children.length >= 1, 'Favorites view should list the favorited file');
+            const labels = children.map(c => pageTreeProvider.getTreeItem(c).label);
+            assert.ok(labels.includes('项目计划.md'), 'Should contain 项目计划.md');
+            await favoritesService.removeFavorite(uri);
+            pageTreeProvider.refresh();
+            const afterRemove = await pageTreeProvider.getChildren();
+            assert.strictEqual(afterRemove.length, 0, 'After removeFavorite and refresh, favorites view should be empty');
+            await configService.setPageViewMode('tree');
+            pageTreeProvider.refresh();
+        });
+
+        test('tree view: favorited file shows file+favorite contextValue', async function() {
+            if (!vscode.workspace.workspaceFolders?.length) {
+                this.skip();
+                return;
+            }
+            const mdPath = path.join(testWorkspacePath, '会议纪要.md');
+            const uri = vscode.Uri.file(mdPath);
+            await favoritesService.addFavorite(uri);
+            pageTreeProvider.refresh();
+            await configService.setPageViewMode('tree');
+            pageTreeProvider.refresh();
+            const children = await pageTreeProvider.getChildren();
+            const meetingItem = children.find(c => c.item.name === '会议纪要.md');
+            if (meetingItem) {
+                const treeItem = pageTreeProvider.getTreeItem(meetingItem);
+                assert.strictEqual(treeItem.contextValue, 'file+favorite', 'Favorited file in tree view should have contextValue file+favorite');
+            }
+            await favoritesService.removeFavorite(uri);
+            pageTreeProvider.refresh();
         });
     });
 

@@ -5,11 +5,13 @@ import { PreviewProvider } from '../providers/previewProvider';
 import { SearchProvider } from '../providers/searchProvider';
 import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
+import { FavoritesService } from '../services/favoritesService';
 import * as commands from '../commands';
 
 export interface ServiceContainer {
     configService: ConfigService;
     fileService: FileService;
+    favoritesService: FavoritesService;
     pageTreeProvider: PageTreeProvider;
     outlineProvider: OutlineProvider;
     previewProvider: PreviewProvider;
@@ -32,6 +34,18 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         }),
         vscode.commands.registerCommand('knowledgeBase.togglePageView', () => {
             commands.togglePageView(c.configService, c.pageTreeProvider);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.setPageViewModeTree', () => {
+            void commands.setPageViewMode('tree', c.configService, c.pageTreeProvider);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.setPageViewModeFlat', () => {
+            void commands.setPageViewMode('flat', c.configService, c.pageTreeProvider);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.setPageViewModeFavorites', () => {
+            void commands.setPageViewMode('favorites', c.configService, c.pageTreeProvider);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.toggleFavorite', (item: vscode.TreeItem | undefined) => {
+            void commands.toggleFavorite(item, c.favoritesService, c.pageTreeProvider);
         }),
         vscode.commands.registerCommand('knowledgeBase.setSortOrder', () => {
             commands.setSortOrder(c.configService, c.pageTreeProvider);
