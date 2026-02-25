@@ -10,6 +10,7 @@ export interface SearchResult {
     fileName: string;
     matchCount: number;
     preview: string;
+    firstMatchLine?: number;
 }
 
 export class SearchItem extends vscode.TreeItem {
@@ -22,12 +23,11 @@ export class SearchItem extends vscode.TreeItem {
         this.description = `${result.matchCount} 处匹配`;
         this.iconPath = new vscode.ThemeIcon('file');
 
-        // Use vscode.open to let VS Code choose the appropriate editor
-        // This will use our Custom Editor for markdown files
+        // 使用 knowledgeBase.openPreview 以提供统一的双模编辑器体验
         this.command = {
-            command: 'vscode.open',
-            title: '打开文件',
-            arguments: [result.uri]
+            command: 'knowledgeBase.openPreview',
+            title: '打开预览',
+            arguments: [result.uri, result.firstMatchLine]
         };
     }
 }
@@ -43,7 +43,7 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
     constructor(
         private fileService: FileService,
         private configService: ConfigService
-    ) {}
+    ) { }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -130,13 +130,14 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
                 if (allMatch) {
                     const matchCount = this.countMatches(content, keywords);
-                    const preview = this.generatePreview(content, keywords);
+                    const { preview, line } = this.generatePreviewAndLine(content, keywords);
 
                     results.push({
                         uri: vscode.Uri.file(filePath),
                         fileName: path.basename(filePath),
                         matchCount,
-                        preview
+                        preview,
+                        firstMatchLine: line
                     });
                 }
             } catch (error) {
@@ -166,13 +167,14 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
                 if (anyMatch) {
                     const matchCount = this.countMatches(content, keywords);
-                    const preview = this.generatePreview(content, keywords);
+                    const { preview, line } = this.generatePreviewAndLine(content, keywords);
 
                     results.push({
                         uri: vscode.Uri.file(filePath),
                         fileName: path.basename(filePath),
                         matchCount,
-                        preview
+                        preview,
+                        firstMatchLine: line
                     });
                 }
             } catch (error) {
@@ -227,10 +229,11 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
         return count;
     }
 
-    private generatePreview(content: string, keywords: string[]): string {
+    private generatePreviewAndLine(content: string, keywords: string[]): { preview: string, line: number } {
         const lines = content.split('\n');
 
-        for (const line of lines) {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
             const lowerLine = line.toLowerCase();
             const hasMatch = keywords.some(keyword =>
                 lowerLine.includes(keyword.toLowerCase())
@@ -238,11 +241,12 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
             if (hasMatch && line.trim().length > 0) {
                 // 截取前 50 个字符作为预览
-                return line.trim().substring(0, 50) + (line.length > 50 ? '...' : '');
+                const preview = line.trim().substring(0, 50) + (line.length > 50 ? '...' : '');
+                return { preview, line: i };
             }
         }
 
-        return '';
+        return { preview: '', line: 0 };
     }
 
     getLastQuery(): string {

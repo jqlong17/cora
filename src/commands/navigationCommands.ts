@@ -15,9 +15,15 @@ export async function gotoHeading(
         ? vscode.Uri.parse(documentUriStr)
         : previewProvider?.getCurrentUri() ?? outlineProvider?.getCurrentDocumentUri();
 
-    // 若大纲传入了文档 URI，且当前无活动编辑器或活动编辑器不是该文档（如预览/编辑模式为 Webview），则打开该文档
+    // 若已经配置了预览提供者，则优先使用预览环境进行统一体验跳转
+    if (previewProvider && documentUri) {
+        await previewProvider.openPreview(documentUri, line);
+        return;
+    }
+
+    // Fallback 到原生编辑器逻辑 (如果预览未就绪)
     const needOpenUri = documentUri && (!editor || editor.document.uri.toString() !== documentUri.toString());
-    if (needOpenUri) {
+    if (needOpenUri && documentUri) {
         const doc = await vscode.workspace.openTextDocument(documentUri);
         editor = await vscode.window.showTextDocument(doc, {
             preview: false,
@@ -36,14 +42,16 @@ export async function gotoHeading(
         });
     }
 
-    const position = new vscode.Position(line, 0);
-    const selection = new vscode.Selection(position, position);
+    if (editor) {
+        const position = new vscode.Position(line, 0);
+        const selection = new vscode.Selection(position, position);
 
-    editor.selection = selection;
-    editor.revealRange(
-        new vscode.Range(position, position),
-        vscode.TextEditorRevealType.InCenterIfOutsideViewport
-    );
+        editor.selection = selection;
+        editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenterIfOutsideViewport
+        );
+    }
 }
 
 function getActiveFileUri(): vscode.Uri | undefined {

@@ -178,7 +178,51 @@ async function initEditor() {
             .create();
 
         window.editor = editor;
-        debug('编辑器就绪 (V2)');
+
+        // 监听来自宿主的跳转指令
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.command === 'scrollToLine') {
+                const line = message.line;
+                debug(`跳转到行: ${line}`);
+
+                if (isSourceMode) {
+                    // 源码模式：简单滚动 Textarea
+                    const lines = textarea.value.split('\n');
+                    const totalLines = lines.length;
+                    const charPos = lines.slice(0, line).join('\n').length;
+
+                    textarea.focus();
+                    textarea.setSelectionRange(charPos, charPos);
+
+                    const lineHeight = textarea.scrollHeight / totalLines;
+                    textarea.scrollTop = lineHeight * line - 100;
+                } else {
+                    // 预览模式：利用 Prosemirror 的 domAtPos 或直接寻找近似元素
+                    // 这是一个简化的实现：寻找编辑器内的第 N 个直接子节点进行滚动
+                    try {
+                        const editorDom = editorElement.querySelector('.milkdown .editor');
+                        if (editorDom && editorDom.children.length > 0) {
+                            // 尝试找到最接近的一个块级元素
+                            // 注意：Markdown 行号与 DOM 节点并不完全 1:1，这里使用预览时的近似定位
+                            const targetIdx = Math.min(line, editorDom.children.length - 1);
+                            const targetEl = editorDom.children[targetIdx];
+                            if (targetEl) {
+                                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                // 简单的视觉高亮反馈
+                                targetEl.style.backgroundColor = 'rgba(125, 90, 255, 0.1)';
+                                setTimeout(() => targetEl.style.backgroundColor = '', 2000);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Scroll failed:', e);
+                    }
+                }
+            }
+        });
+
+        debug('编辑器就绪 (双模已激活)');
+        vscode.postMessage({ command: 'ready' });
 
     } catch (err) {
         debug('初始化失败: ' + err.message);

@@ -10,6 +10,7 @@ export class PreviewProvider {
     private currentUri: vscode.Uri | undefined;
     private saveTimeout: NodeJS.Timeout | undefined;
     private lastSavedContent: string = '';
+    private pendingScrollLine: number | undefined;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -20,16 +21,27 @@ export class PreviewProvider {
     /**
      * 打开预览面板
      */
-    async openPreview(uri: vscode.Uri): Promise<void> {
+    async openPreview(uri: vscode.Uri, line?: number): Promise<void> {
         this.currentUri = uri;
         const fileName = uri.path.split('/').pop() || 'Preview';
 
         if (this.panel) {
             this.panel.title = `${fileName} (Edit)`;
+            if (this.panel.visible) {
+                // 如果面板可见，检查是否是同一个 URI，如果是，则尝试直接跳转而不仅是重载
+                // 这里为了简单，我们先执行 updatePreview，然后发送跳转指令
+            }
             await this.updatePreview();
             this.panel.reveal(vscode.ViewColumn.One);
+
+            if (line !== undefined) {
+                this.pendingScrollLine = line; // 即使面板已打开，也设为 pending，等 update HTML 后处理或直接发
+                this.panel.webview.postMessage({ command: 'scrollToLine', line });
+            }
             return;
         }
+
+        this.pendingScrollLine = line;
 
         this.panel = vscode.window.createWebviewPanel(
             'coraPreview',
@@ -52,6 +64,17 @@ export class PreviewProvider {
             if (msg.command === 'openEditor') {
                 console.log('[Cora] Webview requested switch to source for:', this.currentUri?.fsPath);
                 vscode.commands.executeCommand('knowledgeBase.openEditor', this.currentUri);
+                return;
+            }
+
+            if (msg.command === 'ready') {
+                if (this.pendingScrollLine !== undefined) {
+                    this.panel?.webview.postMessage({
+                        command: 'scrollToLine',
+                        line: this.pendingScrollLine
+                    });
+                    this.pendingScrollLine = undefined;
+                }
                 return;
             }
 
