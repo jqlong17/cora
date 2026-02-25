@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { FileItem } from '../services/fileService';
 import type { PageTreeItem } from '../providers/pageTreeProvider';
+import { t } from '../utils/i18n';
 
 function getSelectedFileItems(
     item: { item: FileItem } | undefined,
@@ -28,7 +29,7 @@ export async function revealInFinder(item: { item: FileItem }): Promise<void> {
     try {
         await vscode.commands.executeCommand('revealFileInOS', item.item.uri);
     } catch (error) {
-        vscode.window.showErrorMessage(`无法在 Finder 中打开: ${error}`);
+        vscode.window.showErrorMessage(`${t('msg.revealFailed')}: ${error}`);
     }
 }
 
@@ -45,10 +46,10 @@ export async function copyPath(
         const text = fileItems.map((fi) => fi.uri.fsPath).join('\n');
         await vscode.env.clipboard.writeText(text);
         vscode.window.showInformationMessage(
-            fileItems.length > 1 ? `已复制 ${fileItems.length} 个文件的绝对路径` : '已复制绝对路径到剪贴板'
+            fileItems.length > 1 ? t('msg.copiedAbsolutePathMulti', { n: fileItems.length }) : t('msg.copiedAbsolutePath')
         );
     } catch (error) {
-        vscode.window.showErrorMessage(`复制路径失败: ${error}`);
+        vscode.window.showErrorMessage(`${t('msg.copyPathFailed')}: ${error}`);
     }
 }
 
@@ -73,10 +74,10 @@ export async function copyRelativePath(
         }
         await vscode.env.clipboard.writeText(lines.join('\n'));
         vscode.window.showInformationMessage(
-            fileItems.length > 1 ? `已复制 ${fileItems.length} 个文件的相对路径` : '已复制相对路径到剪贴板'
+            fileItems.length > 1 ? t('msg.copiedRelativePathMulti', { n: fileItems.length }) : t('msg.copiedRelativePath')
         );
     } catch (error) {
-        vscode.window.showErrorMessage(`复制相对路径失败: ${error}`);
+        vscode.window.showErrorMessage(`${t('msg.copyRelativePathFailed')}: ${error}`);
     }
 }
 
@@ -91,14 +92,12 @@ export async function copyFile(item: { item: FileItem }, fileService: any): Prom
         const ext = path.extname(item.item.name);
         const baseName = path.basename(item.item.name, ext);
 
-        // 生成新文件名：原文件名 + " 副本" + 扩展名
-        let newName = `${baseName} 副本${ext}`;
+        let newName = `${baseName} ${t('msg.copyFileSuffix')}${ext}`;
         let targetUri = vscode.Uri.file(path.join(parentDir, newName));
 
-        // 检查文件是否已存在，如果存在则添加数字后缀
         let counter = 1;
         while (await fileService.fileExists(targetUri)) {
-            newName = `${baseName} 副本 ${counter}${ext}`;
+            newName = `${baseName} ${t('msg.copyFileSuffixWithNum', { n: counter })}${ext}`;
             targetUri = vscode.Uri.file(path.join(parentDir, newName));
             counter++;
         }
@@ -110,8 +109,8 @@ export async function copyFile(item: { item: FileItem }, fileService: any): Prom
         // 创建新文件
         await fs.writeFile(targetUri.fsPath, content);
 
-        vscode.window.showInformationMessage(`已复制文件: ${newName}`);
+        vscode.window.showInformationMessage(t('msg.copiedFile', { name: newName }));
     } catch (error) {
-        vscode.window.showErrorMessage(`复制文件失败: ${error}`);
+        vscode.window.showErrorMessage(`${t('msg.copyFileFailed')}: ${error}`);
     }
 }

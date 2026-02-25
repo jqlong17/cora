@@ -4,6 +4,7 @@ import * as path from 'path';
 import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { isMarkdownFile } from '../utils/markdownParser';
+import { t } from '../utils/i18n';
 
 export interface SearchResult {
     uri: vscode.Uri;
@@ -19,14 +20,13 @@ export class SearchItem extends vscode.TreeItem {
     ) {
         super(result.fileName, vscode.TreeItemCollapsibleState.None);
 
-        this.tooltip = `${result.fileName}\n匹配次数: ${result.matchCount}\n${result.preview}`;
-        this.description = `${result.matchCount} 处匹配`;
+        this.tooltip = `${result.fileName}\n${t('search.matchCount')}: ${result.matchCount}\n${result.preview}`;
+        this.description = t('search.matches', { n: result.matchCount });
         this.iconPath = new vscode.ThemeIcon('file');
 
-        // 使用 knowledgeBase.openPreview 以提供统一的双模编辑器体验
         this.command = {
             command: 'knowledgeBase.openPreview',
-            title: '打开预览',
+            title: t('common.openPreview'),
             arguments: [result.uri, result.firstMatchLine]
         };
     }
@@ -81,7 +81,7 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
-            vscode.window.showWarningMessage('请先打开一个工作区');
+            vscode.window.showWarningMessage(t('msg.noWorkspace'));
             return;
         }
 
@@ -94,18 +94,18 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
                 this.isFallbackMode = true;
                 this.searchResults = fallbackResults;
                 vscode.window.showInformationMessage(
-                    `未找到同时包含所有关键词的文件，显示包含任一关键词的 ${fallbackResults.length} 个结果`
+                    t('msg.noMatchFallback', { n: fallbackResults.length })
                 );
             } else {
                 this.isFallbackMode = false;
                 this.searchResults = [];
-                vscode.window.showInformationMessage('未找到匹配的笔记');
+                vscode.window.showInformationMessage(t('msg.noMatch'));
             }
         } else {
             this.isFallbackMode = false;
             this.searchResults = results;
             if (results.length === 0) {
-                vscode.window.showInformationMessage('未找到匹配的笔记');
+                vscode.window.showInformationMessage(t('msg.noMatch'));
             }
         }
 

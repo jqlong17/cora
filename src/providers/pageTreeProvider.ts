@@ -4,6 +4,7 @@ import { FileService, FileItem } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { FavoritesService } from '../services/favoritesService';
 import { isMarkdownFile } from '../utils/markdownParser';
+import { t } from '../utils/i18n';
 
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
@@ -20,8 +21,8 @@ export class PageTreeItem extends vscode.TreeItem {
             this.iconPath = new vscode.ThemeIcon('file');
             const isMarkdown = /\.(md|markdown)$/i.test(item.name);
             this.command = isMarkdown
-                ? { command: 'knowledgeBase.openPreview', title: '打开预览', arguments: [item.uri] }
-                : { command: 'vscode.open', title: '打开文件', arguments: [item.uri] };
+                ? { command: 'knowledgeBase.openPreview', title: t('common.openPreview'), arguments: [item.uri] }
+                : { command: 'vscode.open', title: t('common.openFile'), arguments: [item.uri] };
             this.contextValue = 'file';
         } else {
             this.iconPath = new vscode.ThemeIcon('folder');
@@ -190,6 +191,6 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
         // Note: VS Code TreeView API doesn't support programmatic expansion of all nodes
         // This would require tracking all visible nodes and calling reveal on each
         // For now, this is a placeholder for future implementation
-        vscode.window.showInformationMessage('全部展开功能将在后续版本优化');
+        vscode.window.showInformationMessage(t('msg.expandAllLater'));
     }
 }

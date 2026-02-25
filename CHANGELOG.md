@@ -1,5 +1,15 @@
 # 更新日志
 
+## \[0.1.10] - 2026-02-25
+
+### 修复
+
+* **Mermaid 预览**：预览模式下部分 Mermaid 代码块（如 `sequenceDiagram`）未渲染为图的问题；Marked 只读预览中会正确加载并渲染 Mermaid，与 Milkdown 编辑模式行为一致；语言标识不区分大小写（`mermaid` / `Mermaid` 等均识别）。
+
+### 优化
+
+* **语言与 Cursor**：界面语言与 VS Code / Cursor 一致，在 i18n 中补充说明 Cursor 使用同一 `vscode.env.language` API，便于后续维护。
+
 ## \[0.1.9] - 2026-02-25
 
 ### 新增

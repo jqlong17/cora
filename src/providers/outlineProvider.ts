@@ -3,6 +3,7 @@ import { OutlineService } from '../services/outlineService';
 import { ConfigService } from '../services/configService';
 import { Heading } from '../utils/constants';
 import { isMarkdownFile } from '../utils/markdownParser';
+import { t } from '../utils/i18n';
 
 export class OutlineItem extends vscode.TreeItem {
     constructor(
@@ -18,7 +19,7 @@ export class OutlineItem extends vscode.TreeItem {
         this.tooltip = `H${heading.level}: ${heading.text}`;
         this.command = {
             command: 'knowledgeBase.gotoHeading',
-            title: '跳转到标题',
+            title: t('outline.gotoHeading'),
             // 传字符串而非 vscode.Uri 对象，避免 VS Code 序列化/反序列化命令参数时丢失类型
             arguments: documentUri ? [heading.line, documentUri.toString()] : [heading.line]
         };

@@ -5,6 +5,7 @@ import { PageTreeProvider, PageTreeItem } from '../providers/pageTreeProvider';
 import { generateNoteTitle, sanitizeFileName } from '../utils/markdownParser';
 import type { PreviewProvider } from '../providers/previewProvider';
 import { openPreview } from './editorCommands';
+import { t } from '../utils/i18n';
 
 export async function newNote(
     item: { item: FileItem } | undefined,
@@ -23,7 +24,7 @@ export async function newNote(
         // Use first workspace folder；无选中时先定位到页面树根节点再显示输入框
         const folders = fileService.getWorkspaceFolders();
         if (folders.length === 0) {
-            vscode.window.showErrorMessage('请先打开一个工作区');
+            vscode.window.showErrorMessage(t('msg.noWorkspace'));
             return;
         }
         parentUri = folders[0].uri;
@@ -35,15 +36,17 @@ export async function newNote(
         }
     }
 
-    // 显示将创建于的路径（相对工作区），让用户明确创建位置
     const createAtPath = vscode.workspace.asRelativePath(parentUri, false);
-    const defaultName = `${generateNoteTitle()}.md`;
+    const defaultName = `${generateNoteTitle(t('newNote.untitledPrefix'))}.md`;
+    const promptStr = createAtPath
+        ? `${t('newNote.prompt')}（${t('newNote.createAt')}: ${createAtPath}/）`
+        : t('newNote.prompt');
     const fileName = await vscode.window.showInputBox({
-        prompt: createAtPath ? `输入笔记文件名（将创建于: ${createAtPath}/）` : '输入笔记文件名',
+        prompt: promptStr,
         value: defaultName,
         validateInput: (value) => {
             if (!value || value.trim() === '') {
-                return '文件名不能为空';
+                return t('newNote.nameRequired');
             }
             return null;
         }
@@ -58,11 +61,10 @@ export async function newNote(
 
     if (newUri) {
         pageTreeProvider.refresh();
-        // Open the new file
         await openPreview(previewProvider, newUri);
-        vscode.window.showInformationMessage(`已创建笔记: ${sanitizedName}`);
+        vscode.window.showInformationMessage(`${t('newNote.created')}: ${sanitizedName}`);
     } else {
-        vscode.window.showErrorMessage('创建笔记失败');
+        vscode.window.showErrorMessage(t('newNote.createFailed'));
     }
 }
 
@@ -81,7 +83,7 @@ export async function newFolder(
     } else {
         const folders = fileService.getWorkspaceFolders();
         if (folders.length === 0) {
-            vscode.window.showErrorMessage('请先打开一个工作区');
+            vscode.window.showErrorMessage(t('msg.noWorkspace'));
             return;
         }
         parentUri = folders[0].uri;
@@ -94,11 +96,14 @@ export async function newFolder(
     }
 
     const createAtPath = vscode.workspace.asRelativePath(parentUri, false);
+    const folderPromptStr = createAtPath
+        ? `${t('newFolder.prompt')}（${t('newFolder.createAt')}: ${createAtPath}/）`
+        : t('newFolder.prompt');
     const folderName = await vscode.window.showInputBox({
-        prompt: createAtPath ? `输入文件夹名称（将创建于: ${createAtPath}/）` : '输入文件夹名称',
+        prompt: folderPromptStr,
         validateInput: (value) => {
             if (!value || value.trim() === '') {
-                return '文件夹名称不能为空';
+                return t('newFolder.nameRequired');
             }
             return null;
         }
@@ -113,9 +118,9 @@ export async function newFolder(
 
     if (newUri) {
         pageTreeProvider.refresh();
-        vscode.window.showInformationMessage(`已创建文件夹: ${sanitizedName}`);
+        vscode.window.showInformationMessage(`${t('newFolder.created')}: ${sanitizedName}`);
     } else {
-        vscode.window.showErrorMessage('创建文件夹失败');
+        vscode.window.showErrorMessage(t('newFolder.createFailed'));
     }
 }
 
@@ -125,15 +130,15 @@ export async function deleteItem(
     pageTreeProvider: PageTreeProvider
 ): Promise<void> {
     const itemName = item.item.name;
-    const itemType = item.item.type === 'directory' ? '文件夹' : '文件';
+    const itemType = item.item.type === 'directory' ? t('fileOp.folder') : t('fileOp.file');
 
     const result = await vscode.window.showWarningMessage(
-        `确定要删除${itemType} "${itemName}" 吗？`,
+        t('fileOp.deleteConfirm', { type: itemType, name: itemName }),
         { modal: true },
-        '删除'
+        t('fileOp.delete')
     );
 
-    if (result !== '删除') {
+    if (result !== t('fileOp.delete')) {
         return;
     }
 
@@ -141,9 +146,9 @@ export async function deleteItem(
 
     if (success) {
         pageTreeProvider.refresh();
-        vscode.window.showInformationMessage(`已删除${itemType}: ${itemName}`);
+        vscode.window.showInformationMessage(`${t('fileOp.deleted', { type: itemType })}: ${itemName}`);
     } else {
-        vscode.window.showErrorMessage(`删除${itemType}失败`);
+        vscode.window.showErrorMessage(t('fileOp.deleteFailed', { type: itemType }));
     }
 }
 
@@ -153,17 +158,17 @@ export async function renameItem(
     pageTreeProvider: PageTreeProvider
 ): Promise<void> {
     const currentName = item.item.name;
-    const itemType = item.item.type === 'directory' ? '文件夹' : '文件';
+    const itemType = item.item.type === 'directory' ? t('fileOp.folder') : t('fileOp.file');
 
     const newName = await vscode.window.showInputBox({
-        prompt: `重命名${itemType}`,
+        prompt: t('fileOp.renamePrompt', { type: itemType }),
         value: currentName,
         validateInput: (value) => {
             if (!value || value.trim() === '') {
-                return '名称不能为空';
+                return t('fileOp.nameRequired');
             }
             if (value === currentName) {
-                return '新名称不能与旧名称相同';
+                return t('fileOp.nameSame');
             }
             return null;
         }
@@ -178,8 +183,8 @@ export async function renameItem(
 
     if (newUri) {
         pageTreeProvider.refresh();
-        vscode.window.showInformationMessage(`已重命名为: ${sanitizedName}`);
+        vscode.window.showInformationMessage(`${t('fileOp.renamed')}: ${sanitizedName}`);
     } else {
-        vscode.window.showErrorMessage('重命名失败');
+        vscode.window.showErrorMessage(t('fileOp.renameFailed'));
     }
 }

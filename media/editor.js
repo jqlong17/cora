@@ -237,21 +237,20 @@ async function initEditor() {
                 ctx.set(rootCtx, editorElement);
                 ctx.set(defaultValueCtx, initialContent);
 
-                // 核心：拦截 Mermaid 节点的渲染
+                // 核心：拦截 Mermaid 节点的渲染（language 兼容大小写，如 mermaid / Mermaid）
+                const isMermaid = (lang) => (lang || '').toLowerCase() === 'mermaid';
                 ctx.update(editorViewOptionsCtx, (prev) => ({
                     ...prev,
                     nodeViews: {
                         ...prev.nodeViews,
-                        // Milkdown 的代码块节点名可能因插件而异，gfm/commonmark 通常是 code_block
                         code_block: (node, view, getPos) => {
-                            if (node.attrs.language === 'mermaid') {
+                            if (isMermaid(node.attrs.language)) {
                                 return createMermaidView(node);
                             }
-                            // 其他代码块使用默认渲染 (Prism 会接管)
                             return null;
                         },
                         fence: (node, view, getPos) => {
-                            if (node.attrs.language === 'mermaid') {
+                            if (isMermaid(node.attrs.language)) {
                                 return createMermaidView(node);
                             }
                             return null;

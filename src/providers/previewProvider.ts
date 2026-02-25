@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
+import { t } from '../utils/i18n';
 
 /**
  * 自定义 Markdown 预览提供者 (Typora 实时编辑模式)
@@ -164,7 +165,7 @@ export class PreviewProvider {
             this.panel.webview.html = this.generateHtml(content, uriForThisLoad, this.panel.webview);
         } catch (error) {
             console.error('Error loading editor:', error);
-            if (this.panel) this.panel.webview.html = this.getErrorHtml('无法加载编辑器资源');
+            if (this.panel) this.panel.webview.html = this.getErrorHtml(t('preview.loadError'));
         }
     }
 
@@ -193,8 +194,8 @@ export class PreviewProvider {
         const rangeStr =
             startLine != null && endLine != null
                 ? endLine > startLine
-                    ? `${fileName} (第${startLine}-${endLine}行)`
-                    : `${fileName} (第${startLine}行)`
+                    ? `${fileName} (${t('preview.lineRefRange', { start: startLine, end: endLine })})`
+                    : `${fileName} (${t('preview.lineRefSingle', { n: startLine })})`
                 : '';
 
         const originalClipboard = await vscode.env.clipboard.readText();
@@ -295,6 +296,7 @@ export class PreviewProvider {
     private generateMarkedOnlyHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
         const extensionUri = this.context.extensionUri;
         const editorMarkedJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor-marked.js'));
+        const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
         const fontCascadiaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
         const fontGoogleSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
         const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
@@ -328,6 +330,8 @@ export class PreviewProvider {
         renderedHtml = this.rewriteHtmlImageUrls(renderedHtml, uri, webview);
         renderedHtml = this.sanitizeHtml(renderedHtml);
         const initialRenderedJson = JSON.stringify(renderedHtml).replace(/<\/script>/gi, '\\u003c/script>');
+        const tabPreview = t('preview.tabPreview');
+        const tabMarkdown = t('preview.tabMarkdown');
 
         return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -369,8 +373,8 @@ export class PreviewProvider {
 <body>
     <div class="top-bar">
         <div class="mode-switch-wrapper">
-            <div id="tab-visual" class="mode-tab active">预览</div>
-            <div id="tab-source" class="mode-tab">Markdown</div>
+            <div id="tab-visual" class="mode-tab active">${tabPreview}</div>
+            <div id="tab-source" class="mode-tab">${tabMarkdown}</div>
         </div>
     </div>
     <div class="content-area">
@@ -389,6 +393,7 @@ export class PreviewProvider {
     </div>
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
+    <script nonce="${nonce}">window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
 </html>`;
@@ -439,6 +444,8 @@ export class PreviewProvider {
         const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
         const imageMap = this.buildImageMap(markdown, uri, webview);
         const initialImageMapJson = JSON.stringify(imageMap).replace(/<\/script>/gi, '\\u003c/script>');
+        const tabPreview = t('preview.tabPreview');
+        const tabMarkdown = t('preview.tabMarkdown');
 
         return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -676,8 +683,8 @@ export class PreviewProvider {
 <body>
     <div class="top-bar">
         <div class="mode-switch-wrapper">
-            <div id="tab-visual" class="mode-tab active">预览</div>
-            <div id="tab-source" class="mode-tab">Markdown</div>
+            <div id="tab-visual" class="mode-tab active">${tabPreview}</div>
+            <div id="tab-source" class="mode-tab">${tabMarkdown}</div>
         </div>
     </div>
     

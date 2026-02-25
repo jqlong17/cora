@@ -60,9 +60,10 @@ export function sanitizeFileName(name: string): string {
     return name.replace(/[\\/:*?"<>|]/g, '').trim();
 }
 
-export function generateNoteTitle(): string {
+/** @param untitledPrefix - Localized "Untitled note" / "未命名笔记", pass from i18n */
+export function generateNoteTitle(untitledPrefix: string): string {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-    return `未命名笔记 ${dateStr} ${timeStr}`;
+    return `${untitledPrefix} ${dateStr} ${timeStr}`;
 }

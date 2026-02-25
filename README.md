@@ -258,11 +258,11 @@ Cora 将两者结合：
 
 * **架构图生成**：利用 AI 分析仓库代码架构，自动总结并输出架构图（如 Mermaid 等）
 
-## 语言
+## 语言 / 更新日志
 
-* [简体中文](./README.md)
+* [简体中文](./README.md) · [更新日志](./CHANGELOG.md)
 
-* [English](./README_EN.md)
+* [English](./README_EN.md) · [Changelog](./CHANGELOG_EN.md)
 
 ## 许可证
 

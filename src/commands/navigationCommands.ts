@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { PreviewProvider } from '../providers/previewProvider';
 import type { OutlineProvider } from '../providers/outlineProvider';
+import { t } from '../utils/i18n';
 
 export async function gotoHeading(
     line: number,
@@ -32,7 +33,7 @@ export async function gotoHeading(
     } else if (!editor) {
         const fallback = documentUri ?? getActiveFileUri();
         if (!fallback) {
-            vscode.window.showWarningMessage('没有活动的编辑器');
+            vscode.window.showWarningMessage(t('msg.noActiveEditor'));
             return;
         }
         const doc = await vscode.workspace.openTextDocument(fallback);

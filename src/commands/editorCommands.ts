@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { PreviewProvider } from '../providers/previewProvider';
+import { t } from '../utils/i18n';
 
 /** 使用 Cora 自带预览（含 Mermaid）打开文件 */
 export async function openPreview(
@@ -11,7 +12,7 @@ export async function openPreview(
         if (activeEditor) {
             uri = activeEditor.document.uri;
         } else {
-            vscode.window.showWarningMessage('请先选择一个文件');
+            vscode.window.showWarningMessage(t('msg.selectFileFirst'));
             return;
         }
     }
@@ -40,7 +41,7 @@ export async function openEditor(
             }
 
             if (!uri || uri.scheme === 'webview-panel') {
-                vscode.window.showWarningMessage('请先选择一个文件');
+                vscode.window.showWarningMessage(t('msg.selectFileFirst'));
                 return;
             }
         }
@@ -58,7 +59,7 @@ export async function togglePreviewEditor(
 ): Promise<void> {
     const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
     if (!activeTab) {
-        vscode.window.showWarningMessage('请先打开一个文件');
+        vscode.window.showWarningMessage(t('msg.openFileFirst'));
         return;
     }
 
@@ -73,7 +74,7 @@ export async function togglePreviewEditor(
         if (uri) {
             await openEditor(uri);
         } else {
-            vscode.window.showWarningMessage('无法识别当前文件');
+            vscode.window.showWarningMessage(t('msg.unknownFile'));
         }
     }
 }
@@ -99,7 +100,7 @@ export async function selectFont(previewProvider?: PreviewProvider): Promise<voi
     const fonts = ['Cascadia Mono', 'Google Sans', 'IBM Plex Mono', 'Noto Sans SC', 'System'];
     const fontItems: DisplaySettingItem[] = fonts.map((f) => ({
         label: f,
-        description: f === currentFont ? '当前' : undefined,
+        description: f === currentFont ? t('display.current') : undefined,
         key: 'fontFamily',
         value: f
     }));
@@ -107,46 +108,46 @@ export async function selectFont(previewProvider?: PreviewProvider): Promise<voi
     const sizes = [12, 14, 15, 17, 20, 24, 30];
     const sizeItems: DisplaySettingItem[] = sizes.map((s) => ({
         label: `${s}px`,
-        description: s === currentFontSize ? '当前' : undefined,
+        description: s === currentFontSize ? t('display.current') : undefined,
         key: 'fontSize',
         value: s
     }));
 
     const linePresets = [
-        { label: '1.2（紧凑）', value: 1.2 },
-        { label: '1.35', value: 1.35 },
-        { label: '1.5（默认）', value: 1.5 },
-        { label: '1.6', value: 1.6 },
-        { label: '2.0（宽松）', value: 2 }
+        { labelKey: 'display.linePreset1_2' as const, value: 1.2 },
+        { labelKey: 'display.linePreset1_35' as const, value: 1.35 },
+        { labelKey: 'display.linePreset1_5' as const, value: 1.5 },
+        { labelKey: 'display.linePreset1_6' as const, value: 1.6 },
+        { labelKey: 'display.linePreset2' as const, value: 2 }
     ];
     const linePreviewItems: DisplaySettingItem[] = linePresets.map((p) => ({
-        label: `预览 · ${p.label}`,
-        description: p.value === currentLineHeightPreview ? '当前' : undefined,
+        label: `${t('display.previewLabel')} · ${t(p.labelKey)}`,
+        description: p.value === currentLineHeightPreview ? t('display.current') : undefined,
         key: 'lineHeightPreview',
         value: p.value
     }));
     const lineSourceItems: DisplaySettingItem[] = linePresets.map((p) => ({
-        label: `Markdown · ${p.label}`,
-        description: p.value === currentLineHeightSource ? '当前' : undefined,
+        label: `${t('display.markdownLabel')} · ${t(p.labelKey)}`,
+        description: p.value === currentLineHeightSource ? t('display.current') : undefined,
         key: 'lineHeightSource',
         value: p.value
     }));
 
     const items: (DisplaySettingItem | vscode.QuickPickItem)[] = [
-        { label: '字体系列', kind: vscode.QuickPickItemKind.Separator },
+        { label: t('display.fontFamily'), kind: vscode.QuickPickItemKind.Separator },
         ...fontItems,
-        { label: '字号', kind: vscode.QuickPickItemKind.Separator },
+        { label: t('display.fontSize'), kind: vscode.QuickPickItemKind.Separator },
         ...sizeItems,
-        { label: '行间距（预览）', kind: vscode.QuickPickItemKind.Separator },
+        { label: t('display.lineHeightPreview'), kind: vscode.QuickPickItemKind.Separator },
         ...linePreviewItems,
-        { label: '行间距（Markdown）', kind: vscode.QuickPickItemKind.Separator },
+        { label: t('display.lineHeightSource'), kind: vscode.QuickPickItemKind.Separator },
         ...lineSourceItems
     ];
 
     const picked = await vscode.window.showQuickPick(items, {
         matchOnDescription: true,
-        placeHolder: '选择一项即可生效',
-        title: '显示设置'
+        placeHolder: t('display.selectOne'),
+        title: t('display.settingsTitle')
     });
 
     const selected = picked as DisplaySettingItem | undefined;

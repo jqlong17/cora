@@ -252,11 +252,11 @@ Planned work, in rough priority order.
 
 * **Architecture diagrams**: Use AI to summarize repo structure and output diagrams (e.g. Mermaid).  
 
-## Languages
+## Languages / Changelog
 
-* [简体中文](./README.md)  
+* [简体中文](./README.md) · [更新日志](./CHANGELOG.md)
 
-* [English](./README_EN.md)  
+* [English](./README_EN.md) · [Changelog](./CHANGELOG_EN.md)  
 
 ## License
 

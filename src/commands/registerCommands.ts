@@ -7,6 +7,7 @@ import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { FavoritesService } from '../services/favoritesService';
 import * as commands from '../commands';
+import { t } from '../utils/i18n';
 
 export interface ServiceContainer {
     configService: ConfigService;
@@ -119,8 +120,8 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         // ── 搜索 ──
         vscode.commands.registerCommand('knowledgeBase.searchNotes', async () => {
             const query = await vscode.window.showInputBox({
-                prompt: '输入搜索关键词',
-                placeHolder: '支持单个关键词或多个关键词（空格分隔）',
+                prompt: t('search.prompt'),
+                placeHolder: t('search.placeHolder'),
                 value: c.searchProvider.getLastQuery()
             });
             if (query) {
@@ -129,7 +130,7 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         }),
         vscode.commands.registerCommand('knowledgeBase.clearSearch', () => {
             c.searchProvider.clear();
-            vscode.window.showInformationMessage('搜索结果已清空');
+            vscode.window.showInformationMessage(t('search.cleared'));
         })
     );
 }

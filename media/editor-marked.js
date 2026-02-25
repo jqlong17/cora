@@ -7,6 +7,16 @@
 
     const debug = (msg) => console.log('[Cora Marked] ' + msg);
 
+    function loadScript(url) {
+        return new Promise(function (resolve) {
+            var s = document.createElement('script');
+            s.src = url;
+            s.onload = function () { resolve(true); };
+            s.onerror = function () { resolve(false); };
+            document.head.appendChild(s);
+        });
+    }
+
     function debounce(fn, delay) {
         let timer = null;
         return function (...args) {
@@ -142,10 +152,53 @@
         }
     });
 
+    var mermaidReady = false;
+    function renderMermaidBlocks(container) {
+        if (!container) return;
+        var codes = container.querySelectorAll('pre code[class*="mermaid"]');
+        if (codes.length === 0) return;
+        var mermaidUrl = window.__CORA_MERMAID__;
+        if (!mermaidUrl) return;
+
+        (function run() {
+            if (window.mermaid) {
+                window.mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+                codes.forEach(function (codeEl, i) {
+                    var pre = codeEl.closest('pre');
+                    if (!pre) return;
+                    var code = (codeEl.textContent || '').trim();
+                    if (!code) return;
+                    var id = 'mermaid-marked-' + i + '-' + Math.random().toString(36).substring(2, 9);
+                    window.mermaid.render(id, code).then(function (result) {
+                        var wrap = document.createElement('div');
+                        wrap.className = 'cora-mermaid-view-container';
+                        wrap.style.margin = '16px 0';
+                        wrap.innerHTML = result.svg;
+                        if (pre.parentNode) pre.parentNode.replaceChild(wrap, pre);
+                    }).catch(function (err) {
+                        if (pre.parentNode) {
+                            pre.innerHTML = '<code style="color:red;font-size:12px;">' + (err.message || 'Mermaid error') + '</code>';
+                        }
+                    });
+                });
+                return;
+            }
+            if (!mermaidReady) {
+                mermaidReady = true;
+                loadScript(mermaidUrl).then(function (ok) {
+                    if (ok && window.mermaid) run();
+                });
+            }
+        })();
+    }
+
     // 初始化内容
     textarea.value = initialContent;
     updateSourceLineNumbers();
-    if (editorEl) editorEl.innerHTML = initialRendered;
+    if (editorEl) {
+        editorEl.innerHTML = initialRendered;
+        renderMermaidBlocks(editorEl);
+    }
 
     // 监听宿主消息
     window.addEventListener('message', function (event) {
@@ -158,6 +211,7 @@
             }
             if (typeof message.renderedHtml === 'string' && editorEl) {
                 editorEl.innerHTML = message.renderedHtml;
+                renderMermaidBlocks(editorEl);
             }
             debug('收到热更新内容');
             return;
