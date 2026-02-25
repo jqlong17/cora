@@ -141,6 +141,15 @@ export class PreviewProvider {
         }
     }
 
+    private getNonce(): string {
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let text = '';
+        for (let i = 0; i < 32; i++) {
+            text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return text;
+    }
+
     /**
      * 生成 Milkdown 集成 HTML
      */
@@ -155,6 +164,8 @@ export class PreviewProvider {
         const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
         const fontNotoSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
 
+        const nonce = this.getNonce();
+
         const config = vscode.workspace.getConfiguration('knowledgeBase');
         const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
         const fontSize = config.get<number>('fontSize', 17);
@@ -163,16 +174,16 @@ export class PreviewProvider {
         let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
         if (fontFamily === 'Cascadia Mono') {
-            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Cascadia Mono Custom', monospace";
         } else if (fontFamily === 'Google Sans') {
-            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Google Sans Custom', sans-serif";
         } else if (fontFamily === 'IBM Plex Mono') {
-            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'IBM Plex Mono Custom', monospace";
         } else if (fontFamily === 'Noto Sans SC') {
-            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Noto Sans SC Custom', sans-serif";
         }
 
@@ -183,9 +194,9 @@ export class PreviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'unsafe-inline' https: vscode-resource: vscode-webview-resource:; img-src https: data: vscode-resource: vscode-webview-resource:; connect-src https:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: data: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script>window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
+    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
     <style>
         ${fontCss}
         body {
@@ -337,7 +348,7 @@ export class PreviewProvider {
     </div>
 
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
-    <script type="module" src="${editorJsUri}"></script>
+    <script type="module" nonce="${nonce}" src="${editorJsUri}"></script>
 </body>
 </html>`;
     }

@@ -7,6 +7,13 @@ const debug = (msg) => {
     console.log('[Cora] ' + msg);
 };
 
+// Prism 不含 mermaid 语法定义，mermaid 块由 NodeView 独立渲染，静默跳过即可
+const _origWarn = console.warn;
+console.warn = (...args) => {
+    if (typeof args[0] === 'string' && args[0].includes('Unsupported language detected')) return;
+    _origWarn.apply(console, args);
+};
+
 function loadScript(url) {
     return new Promise((resolve) => {
         const s = document.createElement('script');
