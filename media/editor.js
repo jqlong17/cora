@@ -20,8 +20,26 @@ function loadScript(url) {
     });
 }
 
-// 缓存已生成的 SVG，避免编辑时的闪烁
+// 缓存已生成的 SVG，加入简单的上限管理防止内存泄漏
 const svgCache = new Map();
+const MAX_CACHE_SIZE = 50;
+
+function addToCache(hash, svg) {
+    if (svgCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = svgCache.keys().next().value;
+        svgCache.delete(firstKey);
+    }
+    svgCache.set(hash, svg);
+}
+
+// 防抖函数
+function debounce(fn, delay) {
+    let timer = null;
+    return function (...args) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
 
 async function initEditor() {
     const editorElement = document.querySelector('#editor');
@@ -76,9 +94,13 @@ async function initEditor() {
             debug('切换至预览模式');
         };
 
+        const debouncedSourceUpdate = debounce((markdown) => {
+            vscode.postMessage({ command: 'editorUpdate', content: markdown });
+        }, 300);
+
         textarea.addEventListener('input', (e) => {
             currentMarkdown = e.target.value;
-            vscode.postMessage({ command: 'editorUpdate', content: currentMarkdown });
+            debouncedSourceUpdate(currentMarkdown);
         });
 
         // 3. 加载 Mermaid
@@ -97,6 +119,9 @@ async function initEditor() {
             container.className = 'cora-mermaid-view-container';
 
             const render = async () => {
+                // 如果是源码模式，不执行渲染操作，节省 CPU
+                if (isSourceMode) return;
+
                 const code = node.textContent.trim();
                 const hash = btoa(unescape(encodeURIComponent(code))).substring(0, 16);
 
@@ -109,7 +134,7 @@ async function initEditor() {
                     try {
                         const id = 'm' + Math.random().toString(36).substring(2, 9);
                         const { svg } = await window.mermaid.render(id, code);
-                        svgCache.set(hash, svg);
+                        addToCache(hash, svg);
                         container.innerHTML = svg;
                     } catch (e) {
                         container.innerHTML = `<pre style="color:red; font-size:12px;">图表语法错误: ${e.message}</pre>`;
@@ -163,10 +188,14 @@ async function initEditor() {
                     }
                 }));
 
+                const debouncedUpdate = debounce((markdown) => {
+                    vscode.postMessage({ command: 'editorUpdate', content: markdown });
+                }, 300);
+
                 ctx.get(listenerCtx).markdownUpdated((_, markdown, prev) => {
                     if (markdown !== prev) {
                         currentMarkdown = markdown;
-                        vscode.postMessage({ command: 'editorUpdate', content: markdown });
+                        debouncedUpdate(markdown);
                     }
                 });
             })
@@ -182,6 +211,19 @@ async function initEditor() {
         // 监听来自宿主的跳转指令
         window.addEventListener('message', event => {
             const message = event.data;
+            if (message.command === 'updateContent') {
+                const { content } = message;
+                currentMarkdown = content;
+                debug('收到热更新内容');
+
+                if (isSourceMode) {
+                    textarea.value = content;
+                } else if (window.editor) {
+                    window.editor.action(replaceAll(content));
+                }
+                return;
+            }
+
             if (message.command === 'scrollToLine') {
                 const line = message.line;
                 debug(`跳转到行: ${line}`);

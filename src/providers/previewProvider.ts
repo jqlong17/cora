@@ -27,15 +27,11 @@ export class PreviewProvider {
 
         if (this.panel) {
             this.panel.title = `${fileName} (Edit)`;
-            if (this.panel.visible) {
-                // 如果面板可见，检查是否是同一个 URI，如果是，则尝试直接跳转而不仅是重载
-                // 这里为了简单，我们先执行 updatePreview，然后发送跳转指令
-            }
-            await this.updatePreview();
+            // 如果面板已经打开，且我们只是切换文件或刷新，则使用异步消息更新内容，避免重载整个 HTML
+            await this.updateContentOnly();
             this.panel.reveal(vscode.ViewColumn.One);
 
             if (line !== undefined) {
-                this.pendingScrollLine = line; // 即使面板已打开，也设为 pending，等 update HTML 后处理或直接发
                 this.panel.webview.postMessage({ command: 'scrollToLine', line });
             }
             return;
@@ -103,7 +99,25 @@ export class PreviewProvider {
     }
 
     /**
-     * 更新内容
+     * 更新内容 (通过指令而非重载 HTML)
+     */
+    async updateContentOnly(): Promise<void> {
+        if (!this.panel || !this.currentUri) return;
+        try {
+            const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
+            this.lastSavedContent = content;
+            this.panel.webview.postMessage({
+                command: 'updateContent',
+                content: content,
+                uri: this.currentUri.toString()
+            });
+        } catch (error) {
+            console.error('Error reading file:', error);
+        }
+    }
+
+    /**
+     * 彻底重载 (仅在必要时调用)
      */
     async updatePreview(): Promise<void> {
         if (!this.panel || !this.currentUri) return;
@@ -187,7 +201,7 @@ export class PreviewProvider {
             max-width: 860px;
             margin: 0 auto;
             min-height: calc(100vh - 48px);
-            padding: 40px;
+            padding: 20px;
             font-family: ${targetFontFamily} !important;
         }
         .milkdown {
@@ -200,7 +214,7 @@ export class PreviewProvider {
         .milkdown .editor {
             font-family: ${targetFontFamily} !important; /* 强制应用字体 */
             padding: 0 !important;
-            line-height: 1.8 !important;
+            line-height: 1.2 !important;
             outline: none !important;
             border: none !important;
         }
@@ -290,7 +304,7 @@ export class PreviewProvider {
             height: 100%;
             border: none;
             outline: none;
-            padding: 40px;
+            padding: 20px;
             font-family: ${targetFontFamily} !important;
             font-size: ${fontSize}px !important; /* 应用动态字号 */
             background: transparent;
