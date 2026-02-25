@@ -109,7 +109,7 @@
       },
       {
         "command": "knowledgeBase.selectFont",
-        "title": "字体设置",
+        "title": "显示设置",
         "icon": "$(case-sensitive)"
       },
       {
@@ -368,10 +368,24 @@
         },
         "knowledgeBase.fontSize": {
           "type": "number",
-          "default": 17,
+          "default": 15,
           "minimum": 12,
           "maximum": 30,
           "description": "编辑器使用的字体大小 (px)"
+        },
+        "knowledgeBase.lineHeightPreview": {
+          "type": "number",
+          "default": 1.5,
+          "minimum": 1,
+          "maximum": 3,
+          "description": "预览模式下行高（倍数）"
+        },
+        "knowledgeBase.lineHeightSource": {
+          "type": "number",
+          "default": 1.6,
+          "minimum": 1,
+          "maximum": 3,
+          "description": "Markdown 模式下行高（倍数）"
         }
       }
     },

@@ -73,13 +73,23 @@ async function initEditor() {
         visualContainer = document.getElementById('visual-editor-container');
         sourceContainer = document.getElementById('source-editor-container');
         textarea = document.getElementById('source-textarea');
+        const lineNumbersEl = document.getElementById('source-line-numbers');
         tabVisual = document.getElementById('tab-visual');
         tabSource = document.getElementById('tab-source');
 
-        window.switchToSource = () => {
+        function updateSourceLineNumbers() {
+            const lineCount = Math.max(1, (textarea.value.match(/\n/g) || []).length + 1);
+            lineNumbersEl.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+        }
+        function syncLineNumbersScroll() {
+            lineNumbersEl.scrollTop = textarea.scrollTop;
+        }
+
+        const switchToSource = () => {
             if (isSourceMode) return;
             isSourceMode = true;
             textarea.value = currentMarkdown;
+            updateSourceLineNumbers();
             visualContainer.style.display = 'none';
             sourceContainer.style.display = 'block';
             tabVisual.classList.remove('active');
@@ -87,9 +97,10 @@ async function initEditor() {
             debug('切换至源码模式');
         };
 
-        window.switchToVisual = () => {
+        const switchToVisual = () => {
             if (!isSourceMode) return;
             isSourceMode = false;
+            hideSelectionToolbar();
             currentMarkdown = textarea.value;
             if (window.editor) {
                 window.editor.action(replaceAll(currentMarkdown));
@@ -101,13 +112,63 @@ async function initEditor() {
             debug('切换至预览模式');
         };
 
+        tabSource.addEventListener('click', switchToSource);
+        tabVisual.addEventListener('click', switchToVisual);
+
         const debouncedSourceUpdate = debounce((markdown) => {
             vscode.postMessage({ command: 'editorUpdate', content: markdown });
         }, 300);
 
         textarea.addEventListener('input', (e) => {
             currentMarkdown = e.target.value;
+            updateSourceLineNumbers();
             debouncedSourceUpdate(currentMarkdown);
+        });
+        textarea.addEventListener('scroll', syncLineNumbersScroll);
+
+        // 划词浮层：Add to Chat（仅 Markdown 模式）
+        const selectionToolbar = document.getElementById('cora-selection-toolbar');
+        const addToChatBtn = document.getElementById('cora-add-to-chat-btn');
+        function getSelectedText() {
+            const start = textarea.selectionStart, end = textarea.selectionEnd;
+            return start !== end ? textarea.value.substring(start, end) : '';
+        }
+        function getSelectionLineRange() {
+            const v = textarea.value;
+            const start = textarea.selectionStart, end = textarea.selectionEnd;
+            const startLine = (v.substring(0, start).match(/\n/g) || []).length + 1;
+            const endLine = (v.substring(0, end).match(/\n/g) || []).length + 1;
+            return { startLine, endLine };
+        }
+        function showSelectionToolbar() {
+            if (getSelectedText()) {
+                selectionToolbar.classList.add('visible');
+                selectionToolbar.setAttribute('aria-hidden', 'false');
+            }
+        }
+        function hideSelectionToolbar() {
+            if (!selectionToolbar) return;
+            selectionToolbar.classList.remove('visible');
+            selectionToolbar.setAttribute('aria-hidden', 'true');
+        }
+        textarea.addEventListener('mouseup', () => {
+            if (isSourceMode) showSelectionToolbar();
+        });
+        textarea.addEventListener('keyup', (e) => {
+            if (isSourceMode && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Shift')) {
+                if (getSelectedText()) showSelectionToolbar();
+                else hideSelectionToolbar();
+            }
+        });
+        addToChatBtn.addEventListener('click', () => {
+            const text = getSelectedText();
+            if (!text) return;
+            const { startLine, endLine } = getSelectionLineRange();
+            vscode.postMessage({ command: 'addToChat', startLine, endLine, text });
+            hideSelectionToolbar();
+        });
+        sourceContainer.addEventListener('mousedown', (e) => {
+            if (!selectionToolbar.contains(e.target) && e.target !== textarea) hideSelectionToolbar();
         });
 
         // 3. 加载 Mermaid
@@ -225,6 +286,7 @@ async function initEditor() {
 
                 if (isSourceMode) {
                     textarea.value = content;
+                    updateSourceLineNumbers();
                 } else if (window.editor) {
                     window.editor.action(replaceAll(content));
                 }

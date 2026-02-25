@@ -22,12 +22,14 @@ Cora combines both:
 
 ## Use Cases
 
-| Scenario | Traditional Way | Cora Way |
-|----------|-----------------|----------|
-| Organizing project docs | Nested folder chaos | Hierarchical page tree at a glance |
-| Reading long documents | Scroll to find content | Outline navigation, jump to target section instantly |
-| Finding notes | Open files one by one | Full-text search with keyword highlighting |
-| Switching coding/writing | Two apps back and forth | One VS Code, two modes |
+
+| Scenario                 | Traditional Way         | Cora Way                                             |
+| ------------------------ | ----------------------- | ---------------------------------------------------- |
+| Organizing project docs  | Nested folder chaos     | Hierarchical page tree at a glance                   |
+| Reading long documents   | Scroll to find content  | Outline navigation, jump to target section instantly |
+| Finding notes            | Open files one by one   | Full-text search with keyword highlighting           |
+| Switching coding/writing | Two apps back and forth | One VS Code, two modes                               |
+
 
 ## Core Design Philosophy
 
@@ -40,6 +42,7 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 ## Features
 
 ### 📄 Page Tree
+
 - **Flat/Tree Toggle**: By default, files are shown in a folder hierarchy tree; you can switch to a flat list sorted by modification time (newest first)
 - **File Tree View**: In tree mode, display complete file hierarchy from workspace root
 - **Smart Filtering**: In tree mode, toggle between [All Files] and [Markdown Only]
@@ -48,12 +51,14 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **Expand/Collapse**: Expand all, collapse all
 
 ### 📋 Outline
+
 - **Real-time Following**: Automatically follow the active editor/preview; outline updates as you edit (including Cora edit mode)
 - **Tree Hierarchy**: H1→H2→H3 auto-builds parent-child relationships, expanded by default
 - **Quick Jump**: Click outline item to jump to position (works in both preview and edit mode)
 - **Level Labels**: H1, H2, H3 text labels for heading levels, clean and clear
 
 ### 🔍 Search
+
 - **Full-text Search**: Search content across all Markdown files in workspace
 - **Multi-keyword**: Support `A B` format to search files containing all keywords
 - **Smart Fallback**: When AND search has no results, automatically fallback to OR search
@@ -61,6 +66,7 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 - **Result Sorting**: Automatically sort by match count
 
 ### 📝 Edit and Preview
+
 - **Preview by Default**: Click Markdown file to open in preview mode, read rendered content directly
 - **One-click Toggle**: Preview/Markdown button in editor top-right to switch modes
 - **Outline Sync**: Outline remains visible and functional in preview mode
@@ -78,37 +84,35 @@ Keep VS Code's editing power, add Notion's organizational capabilities.
 ### Usage Guide
 
 1. **Open Cora Panel**
-   - Click the 📖 Cora icon in the left activity bar
-   - Or use shortcut `Cmd+Shift+P` and type "Cora"
-
+  - Click the 📖 Cora icon in the left activity bar
+  - Or use shortcut `Cmd+Shift+P` and type "Cora"
 2. **Browse Files (Page Tree)**
-   - In the [Pages] tab, the default **tree** view shows folder hierarchy; you can switch to flat view sorted by modification time
-   - Toolbar: **New note**, **New folder**; “Toggle flat/tree” to switch view; in tree view use [All/Markdown] filter
-   - Right-click files for various operations
-
+  - In the [Pages] tab, the default **tree** view shows folder hierarchy; you can switch to flat view sorted by modification time
+  - Toolbar: **New note**, **New folder**; “Toggle flat/tree” to switch view; in tree view use [All/Markdown] filter
+  - Right-click files for various operations
 3. **View Document Structure (Outline)**
-   - Open any Markdown file
-   - Switch to [Outline] tab to view document heading structure
-   - Click heading items to jump to corresponding positions
-   - Support expand/collapse subheadings
-
+  - Open any Markdown file
+  - Switch to [Outline] tab to view document heading structure
+  - Click heading items to jump to corresponding positions
+  - Support expand/collapse subheadings
 4. **Search Notes**
-   - Switch to [Search] tab
-   - Click 🔍 **Search Notes** button
-   - Enter keywords, support multi-keyword (space separated)
-   - View search results and click to open files
-
+  - Switch to [Search] tab
+  - Click 🔍 **Search Notes** button
+  - Enter keywords, support multi-keyword (space separated)
+  - View search results and click to open files
 5. **Edit and Preview**
-   - Click Markdown file → Opens in preview mode by default
-   - **Cursor**: Use the **Markdown** / **Preview** buttons in the editor area
-   - **VS Code**: If no inline buttons, use `Cmd+Shift+V` (preview), `Cmd+E` (edit), or the title bar icons
+  - Click Markdown file → Opens in preview mode by default
+  - **Cursor**: Use the **Markdown** / **Preview** buttons in the editor area
+  - **VS Code**: If no inline buttons, use `Cmd+Shift+V` (preview), `Cmd+E` (edit), or the title bar icons
 
 ## Keyboard Shortcuts
 
-| Action | Shortcut |
-|--------|----------|
-| Open Markdown Preview | `Cmd+Shift+V` |
-| Return to Editor from Preview | `Cmd+E` |
+
+| Action                        | Shortcut      |
+| ----------------------------- | ------------- |
+| Open Markdown Preview         | `Cmd+Shift+V` |
+| Return to Editor from Preview | `Cmd+E`       |
+
 
 ## Context Menu Features
 
@@ -125,22 +129,26 @@ Right-click on files or folders in the page tree:
 
 ## Search Tips
 
-| Input | Description | Result |
-|-------|-------------|--------|
-| `project` | Single keyword | All notes containing "project" |
-| `project plan` | Multi-keyword (AND) | Notes containing both "project" and "plan" |
-| `project plan` (no AND results) | Smart fallback (OR) | Notes containing "project" or "plan" |
+
+| Input                           | Description         | Result                                     |
+| ------------------------------- | ------------------- | ------------------------------------------ |
+| `project`                       | Single keyword      | All notes containing "project"             |
+| `project plan`                  | Multi-keyword (AND) | Notes containing both "project" and "plan" |
+| `project plan` (no AND results) | Smart fallback (OR) | Notes containing "project" or "plan"       |
+
 
 ## Configuration
 
 Search for "knowledgeBase" in VS Code settings to configure:
 
-| Config | Type | Default | Description |
-|--------|------|---------|-------------|
-| `knowledgeBase.filterMode` | string | `"markdown"` | Page tree file filter mode (tree view) |
-| `knowledgeBase.pageViewMode` | string | `"tree"` | Page view mode: `tree` (hierarchy) or `flat` (by mtime) |
-| `knowledgeBase.markdownExtensions` | array | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions |
-| `knowledgeBase.autoReveal` | boolean | `true` | Auto reveal current file in page tree |
+
+| Config                             | Type    | Default                        | Description                                             |
+| ---------------------------------- | ------- | ------------------------------ | ------------------------------------------------------- |
+| `knowledgeBase.filterMode`         | string  | `"markdown"`                   | Page tree file filter mode (tree view)                  |
+| `knowledgeBase.pageViewMode`       | string  | `"tree"`                       | Page view mode: `tree` (hierarchy) or `flat` (by mtime) |
+| `knowledgeBase.markdownExtensions` | array   | `[".md", ".markdown", ".mdx"]` | Recognized Markdown file extensions                     |
+| `knowledgeBase.autoReveal`         | boolean | `true`                         | Auto reveal current file in page tree                   |
+
 
 ## Roadmap
 

@@ -93,6 +93,15 @@ export class PreviewProvider {
                     }
                 }, 800);
             }
+
+            if (msg.command === 'addToChat') {
+                const startLine = typeof msg.startLine === 'number' ? msg.startLine : undefined;
+                const endLine = typeof msg.endLine === 'number' ? msg.endLine : undefined;
+                const text = typeof msg.text === 'string' ? msg.text : '';
+                this.addLocationToChat(startLine, endLine, text).catch((e) => {
+                    console.error('[Cora] Add to Chat failed:', e);
+                });
+            }
         });
 
         await this.updatePreview();
@@ -141,6 +150,52 @@ export class PreviewProvider {
         }
     }
 
+    /**
+     * 将「文件 + 行范围」送入 Cursor/VS Code 聊天（与 Cursor 原生行为一致：发送定位引用而非粘贴全文）
+     * 若无“添加文件引用”类命令，则粘贴形如 "文件名 (行号)" 的引用字符串。
+     */
+    private async addLocationToChat(
+        startLine?: number,
+        endLine?: number,
+        fallbackText?: string
+    ): Promise<void> {
+        if (!this.currentUri) return;
+        const uri = this.currentUri;
+        const fileName = uri.path.split('/').pop() || '';
+
+        const rangeStr =
+            startLine != null && endLine != null
+                ? endLine > startLine
+                    ? `${fileName} (第${startLine}-${endLine}行)`
+                    : `${fileName} (第${startLine}行)`
+                : '';
+
+        const originalClipboard = await vscode.env.clipboard.readText();
+        try {
+            const toPaste = rangeStr.length > 0 ? rangeStr : (fallbackText || '');
+            if (toPaste.length === 0) return;
+
+            await vscode.env.clipboard.writeText(toPaste);
+            const showChatCommands = ['aichat.show-ai-chat', 'workbench.action.chat.open'];
+            let opened = false;
+            for (const cmd of showChatCommands) {
+                try {
+                    await vscode.commands.executeCommand(cmd);
+                    opened = true;
+                    break;
+                } catch {
+                    // 命令不存在则尝试下一个
+                }
+            }
+            if (opened) {
+                await new Promise((r) => setTimeout(r, 400));
+                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            }
+        } finally {
+            await vscode.env.clipboard.writeText(originalClipboard);
+        }
+    }
+
     private getNonce(): string {
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         let text = '';
@@ -168,7 +223,9 @@ export class PreviewProvider {
 
         const config = vscode.workspace.getConfiguration('knowledgeBase');
         const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
-        const fontSize = config.get<number>('fontSize', 17);
+        const fontSize = config.get<number>('fontSize', 15);
+        const lineHeightPreview = config.get<number>('lineHeightPreview', 1.5);
+        const lineHeightSource = config.get<number>('lineHeightSource', 1.6);
 
         let fontCss = '';
         let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -225,25 +282,26 @@ export class PreviewProvider {
         .milkdown .editor {
             font-family: ${targetFontFamily} !important; /* 强制应用字体 */
             padding: 0 !important;
-            line-height: 1.2 !important;
+            line-height: ${lineHeightPreview} !important;
             outline: none !important;
             border: none !important;
         }
         .milkdown .editor:focus {
             outline: none !important;
         }
-        /* 表格样式优化 - 偏向简约 */
+        /* 表格样式 - 紧凑显示 */
         .milkdown table {
             border-collapse: collapse;
             width: 100%;
-            margin: 24px 0;
+            margin: 16px 0;
             border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
             font-size: 14px;
+            line-height: 1.35;
             background: transparent !important;
         }
         .milkdown th, .milkdown td {
             border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
-            padding: 10px 14px;
+            padding: 4px 10px;
             text-align: left;
             background: transparent !important;
         }
@@ -309,19 +367,78 @@ export class PreviewProvider {
             display: none;
             background: var(--vscode-editor-background);
         }
-        
-        #source-textarea {
+        .source-editor-wrapper {
+            display: flex;
             width: 100%;
             height: 100%;
+        }
+        .source-line-numbers {
+            width: 3em;
+            min-width: 3em;
+            padding: 20px 8px 20px 16px;
+            font-family: ${targetFontFamily} !important;
+            font-size: ${fontSize}px !important;
+            line-height: ${lineHeightSource};
+            color: var(--vscode-editorLineNumber-foreground, #6e7681);
+            text-align: right;
+            user-select: none;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border-right: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.1));
+            background: var(--vscode-editorLineNumber-activeLineBackground, transparent);
+            white-space: pre;
+            box-sizing: border-box;
+        }
+        .source-line-numbers::-webkit-scrollbar {
+            width: 0;
+            display: none;
+        }
+        #source-textarea {
+            flex: 1;
+            min-width: 0;
             border: none;
             outline: none;
-            padding: 20px;
+            padding: 20px 20px 20px 12px;
             font-family: ${targetFontFamily} !important;
             font-size: ${fontSize}px !important; /* 应用动态字号 */
             background: transparent;
             color: var(--vscode-editor-foreground);
             resize: none;
-            line-height: 1.6;
+            line-height: ${lineHeightSource};
+        }
+
+        /* 划词浮层 - Add to Chat */
+        .cora-selection-toolbar {
+            position: absolute;
+            top: 8px;
+            right: 16px;
+            z-index: 100;
+            display: none;
+            flex: none;
+            background: var(--vscode-editorWidget-background, #f3f4f6);
+            border: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.12));
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 2px 4px;
+            font-size: 12px;
+            color: var(--vscode-foreground, #24292f);
+        }
+        .cora-selection-toolbar.visible {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .cora-selection-toolbar button {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--vscode-foreground, #24292f);
+        }
+        .cora-selection-toolbar button:hover {
+            background: var(--vscode-toolbar-hoverBackground, rgba(0,0,0,0.06));
         }
 
         /* 强力隐藏 */
@@ -333,8 +450,8 @@ export class PreviewProvider {
 <body>
     <div class="top-bar">
         <div class="mode-switch-wrapper">
-            <div id="tab-visual" class="mode-tab active" onclick="switchToVisual()">预览</div>
-            <div id="tab-source" class="mode-tab" onclick="switchToSource()">编辑</div>
+            <div id="tab-visual" class="mode-tab active">预览</div>
+            <div id="tab-source" class="mode-tab">Markdown</div>
         </div>
     </div>
     
@@ -343,7 +460,13 @@ export class PreviewProvider {
             <div id="editor"></div>
         </div>
         <div id="source-editor-container">
-            <textarea id="source-textarea" spellcheck="false"></textarea>
+            <div class="source-editor-wrapper" style="position: relative;">
+                <div id="source-line-numbers" class="source-line-numbers">1</div>
+                <textarea id="source-textarea" spellcheck="false"></textarea>
+                <div id="cora-selection-toolbar" class="cora-selection-toolbar" aria-hidden="true">
+                    <button type="button" id="cora-add-to-chat-btn">Add to Chat ⌘L</button>
+                </div>
+            </div>
         </div>
     </div>
 

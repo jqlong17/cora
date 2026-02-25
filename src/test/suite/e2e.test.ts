@@ -302,23 +302,28 @@ suite('Cora E2E Test Suite', () => {
             const coraCommands = commands.filter(cmd => cmd.startsWith('knowledgeBase.'));
 
             const expectedCommands = [
+                'knowledgeBase.refreshPageTree',
+                'knowledgeBase.toggleFilter',
+                'knowledgeBase.togglePageView',
+                'knowledgeBase.setSortOrder',
+                'knowledgeBase.showAllFiles',
+                'knowledgeBase.showMarkdownOnly',
+                'knowledgeBase.outlineCollapseAll',
+                'knowledgeBase.outlineExpandAll',
                 'knowledgeBase.newNote',
                 'knowledgeBase.newFolder',
                 'knowledgeBase.deleteItem',
                 'knowledgeBase.renameItem',
-                'knowledgeBase.searchNotes',
-                'knowledgeBase.clearSearch',
-                'knowledgeBase.openEditor',
                 'knowledgeBase.openPreview',
-                'knowledgeBase.toggleFilter',
-                'knowledgeBase.outlineCollapseAll',
-                'knowledgeBase.outlineExpandAll',
-                'knowledgeBase.refreshPageTree',
+                'knowledgeBase.openEditor',
+                'knowledgeBase.togglePreviewEditor',
+                'knowledgeBase.selectFont',
                 'knowledgeBase.gotoHeading',
                 'knowledgeBase.revealInFinder',
                 'knowledgeBase.copyPath',
                 'knowledgeBase.copyRelativePath',
-                'knowledgeBase.copyFile'
+                'knowledgeBase.searchNotes',
+                'knowledgeBase.clearSearch'
             ];
 
             for (const cmd of expectedCommands) {
@@ -786,6 +791,9 @@ suite('Cora E2E Test Suite', () => {
     });
 
     suite('Editor Display and Tab State', () => {
+        // 注意：Cora 预览/Markdown 双模、行号、划词 Add to Chat 等均在 webview 内实现，
+        // 当前 E2E 仅验证命令与 Tab 状态，不驱动 webview 内 UI。
+
         test('should open markdown file in editor with correct display', async () => {
             const testFile = path.join(testWorkspacePath, '项目计划.md');
             const document = await vscode.workspace.openTextDocument(testFile);
@@ -821,6 +829,28 @@ suite('Cora E2E Test Suite', () => {
             const previewTab = vscode.window.tabGroups.activeTabGroup.activeTab;
             assert.ok(previewTab, 'Should have active tab after preview');
             assert.ok(previewTab.label.includes('会议纪要'), 'Tab label should show filename');
+
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        });
+
+        test('should switch from Cora preview to native editor when openEditor is run', async function() {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                this.skip();
+                return;
+            }
+            const testFile = path.join(testWorkspacePath, '读书笔记.md');
+            const uri = vscode.Uri.file(testFile);
+            await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            await vscode.commands.executeCommand('knowledgeBase.openEditor', uri);
+            await new Promise(resolve => setTimeout(resolve, 400));
+
+            const activeEditor = vscode.window.activeTextEditor;
+            assert.ok(activeEditor, 'After openEditor should have active text editor');
+            assert.ok(activeEditor.document.uri.fsPath === testFile || activeEditor.document.fileName === testFile,
+                'Active editor should show the same file');
 
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
         });
