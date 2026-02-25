@@ -12,13 +12,15 @@ const mockVscode = {
         createWebviewPanel: () => ({
             webview: {
                 onDidReceiveMessage: (cb) => { global.onMsg = cb; },
-                asWebviewUri: (uri) => uri,
+                asWebviewUri: (uri) => (uri && (uri.fsPath || uri.path) ? 'file://' + (uri.fsPath || uri.path) : uri),
+                cspSource: 'https://vscode-csp.net',
                 html: ''
             },
             onDidDispose: () => { }
         })
     },
     workspace: {
+        getConfiguration: () => ({ get: (key, def) => def }),
         fs: {
             writeFile: async (uri, content) => {
                 global.lastWrite = { uri: uri.fsPath, content: Buffer.from(content).toString() };

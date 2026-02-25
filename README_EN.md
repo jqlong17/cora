@@ -4,7 +4,7 @@ A Notion-inspired knowledge management plugin for VS Code
 
 ## Why Cora?
 
-VS Code and Cursor's interfaces are designed for programming—file tree on the left, editor in the middle, AI chat on the right. This layout works well for coding, but it's not ideal for knowledge management.
+VS Code and Cursor's interfaces are designed for programming—file tree on the left, editor in the middle, AI chat on the right. This layout works well for coding, but it's not ideal for knowledge management.ΩΩ
 
 Notion excels at knowledge management: hierarchical pages, document outlines, full-text search. But it lacks VS Code's powerful editing capabilities and AI integration.
 

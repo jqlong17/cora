@@ -152,7 +152,10 @@ async function initEditor() {
             selectionToolbar.setAttribute('aria-hidden', 'true');
         }
         textarea.addEventListener('mouseup', () => {
-            if (isSourceMode) showSelectionToolbar();
+            if (isSourceMode) {
+                if (getSelectedText()) showSelectionToolbar();
+                else hideSelectionToolbar();
+            }
         });
         textarea.addEventListener('keyup', (e) => {
             if (isSourceMode && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Shift')) {

@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import { marked } from 'marked';
 
 /**
  * 自定义 Markdown 预览提供者 (Typora 实时编辑模式)
- * 采用 Milkdown 引擎实现混合预览编辑体验
+ * 采用 Milkdown 引擎实现混合预览编辑体验；含 HTML 的文档使用 Marked 只读预览（方案二）
  */
 export class PreviewProvider {
     private panel: vscode.WebviewPanel | undefined;
@@ -11,6 +12,8 @@ export class PreviewProvider {
     private saveTimeout: NodeJS.Timeout | undefined;
     private lastSavedContent: string = '';
     private pendingScrollLine: number | undefined;
+    /** 当前面板是否为 Marked 只读模式（含 HTML 文档），用于切换文件时决定是否整页重载 */
+    private currentPreviewMode: 'milkdown' | 'marked' = 'milkdown';
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -109,17 +112,28 @@ export class PreviewProvider {
 
     /**
      * 更新内容 (通过指令而非重载 HTML)
+     * 含 HTML 时附带 renderedHtml，供 Marked 只读模式更新预览区。
+     * 若从「含 HTML」切到「不含」或反向，整页重载以切换 Milkdown / Marked 模式。
      */
     async updateContentOnly(): Promise<void> {
         if (!this.panel || !this.currentUri) return;
         try {
             const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
             this.lastSavedContent = content;
-            this.panel.webview.postMessage({
+            const newMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
+            if (newMode !== this.currentPreviewMode) {
+                await this.updatePreview();
+                return;
+            }
+            const payload: { command: string; content: string; uri: string; renderedHtml?: string } = {
                 command: 'updateContent',
-                content: content,
+                content,
                 uri: this.currentUri.toString()
-            });
+            };
+            if (newMode === 'marked') {
+                payload.renderedHtml = this.sanitizeHtml(marked.parse(content) as string);
+            }
+            this.panel.webview.postMessage(payload);
         } catch (error) {
             console.error('Error reading file:', error);
         }
@@ -134,6 +148,7 @@ export class PreviewProvider {
         try {
             const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
             this.lastSavedContent = content;
+            this.currentPreviewMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
             this.panel.webview.html = this.generateHtml(content, this.currentUri, this.panel.webview);
         } catch (error) {
             console.error('Error loading editor:', error);
@@ -176,7 +191,8 @@ export class PreviewProvider {
             if (toPaste.length === 0) return;
 
             await vscode.env.clipboard.writeText(toPaste);
-            const showChatCommands = ['aichat.show-ai-chat', 'workbench.action.chat.open'];
+            // 优先用 opensidebar 聚焦已有对话，避免新建对话；再回退到 show-ai-chat / workbench
+            const showChatCommands = ['aichat.opensidebar', 'aichat.show-ai-chat', 'workbench.action.chat.open'];
             let opened = false;
             for (const cmd of showChatCommands) {
                 try {
@@ -205,10 +221,129 @@ export class PreviewProvider {
         return text;
     }
 
+    /** 检测文档是否包含需渲染的 HTML 块/标签，用于走 Marked 只读预览分支 */
+    private containsHtmlBlock(content: string): boolean {
+        return /<[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>|<\s*\/\s*[a-zA-Z]/.test(content);
+    }
+
+    /** 清洗 marked 输出：移除 script 与事件属性，避免 XSS */
+    private sanitizeHtml(html: string): string {
+        let out = html
+            .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+            .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+            .replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '');
+        return out;
+    }
+
+    /**
+     * 生成 Marked 只读预览 HTML（方案二：含 HTML 的 md 用 marked 渲染，编辑仅源码）
+     */
+    private generateMarkedOnlyHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
+        const extensionUri = this.context.extensionUri;
+        const editorMarkedJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor-marked.js'));
+        const fontCascadiaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
+        const fontGoogleSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
+        const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
+        const fontNotoSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+
+        const nonce = this.getNonce();
+        const config = vscode.workspace.getConfiguration('knowledgeBase');
+        const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
+        const fontSize = config.get<number>('fontSize', 15);
+        const lineHeightPreview = config.get<number>('lineHeightPreview', 1.5);
+        const lineHeightSource = config.get<number>('lineHeightSource', 1.6);
+
+        let fontCss = '';
+        let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        if (fontFamily === 'Cascadia Mono') {
+            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            targetFontFamily = "'Cascadia Mono Custom', monospace";
+        } else if (fontFamily === 'Google Sans') {
+            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            targetFontFamily = "'Google Sans Custom', sans-serif";
+        } else if (fontFamily === 'IBM Plex Mono') {
+            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            targetFontFamily = "'IBM Plex Mono Custom', monospace";
+        } else if (fontFamily === 'Noto Sans SC') {
+            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            targetFontFamily = "'Noto Sans SC Custom', sans-serif";
+        }
+
+        const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
+        const renderedHtml = this.sanitizeHtml(marked.parse(markdown) as string);
+        const initialRenderedJson = JSON.stringify(renderedHtml).replace(/<\/script>/gi, '\\u003c/script>');
+
+        return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' ${webview.cspSource}; img-src https: data: ${webview.cspSource}; connect-src https:;">
+    <title>Cora Editor (Marked)</title>
+    <style>
+        ${fontCss}
+        body { font-family: ${targetFontFamily}; background: var(--vscode-editor-background, #fff); color: var(--vscode-editor-foreground, #24292f); margin: 0; padding: 0; overflow: hidden; -webkit-font-smoothing: antialiased; }
+        .top-bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--vscode-editor-background, #fff); border-bottom: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.08)); display: flex; align-items: center; justify-content: center; padding: 0 20px; z-index: 1001; }
+        .mode-switch-wrapper { position: absolute; right: 40px; display: flex; background: #eee; border-radius: 4px; padding: 2px; gap: 2px; user-select: none; }
+        .mode-tab { padding: 3px 12px; font-size: 12px; border-radius: 3px; cursor: pointer; transition: all 0.2s ease; color: #666; min-width: 40px; text-align: center; }
+        .mode-tab.active { background: #7d5aff; color: #fff; }
+        .mode-tab:not(.active):hover { background: #e0e0e0; }
+        .content-area { margin-top: 48px; height: calc(100vh - 48px); overflow: auto; }
+        #marked-preview { max-width: 860px; margin: 0 auto; padding: 20px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; line-height: ${lineHeightPreview} !important; }
+        /* 表格：表头浅灰底、常规字重、底部分隔线；数据行白底，链接蓝色下划线 */
+        #marked-preview table { border-collapse: collapse; width: 100%; margin: 16px 0; border: 1px solid var(--vscode-widget-border, #e1e4e8); font-size: 14px; background: var(--vscode-editor-background, #fff); }
+        #marked-preview thead th { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); color: var(--vscode-editor-foreground, #24292f); font-weight: normal; border: 1px solid var(--vscode-widget-border, #e1e4e8); border-bottom: 1px solid var(--vscode-widget-border, #e1e4e8); padding: 8px 12px; text-align: left; }
+        #marked-preview tbody td { border: 1px solid var(--vscode-widget-border, #e1e4e8); padding: 8px 12px; text-align: left; background: var(--vscode-editor-background, #fff); }
+        #marked-preview tbody td a { color: #0969da; text-decoration: underline; }
+        #marked-preview img { max-width: 100%; height: auto; }
+        /* 代码块：浅灰底、圆角、等宽字体、内边距与行高 */
+        #marked-preview pre { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); border-radius: 6px; padding: 12px 16px; margin: 16px 0; overflow: auto; line-height: 1.45; border: 1px solid var(--vscode-widget-border, #e1e4e8); }
+        #marked-preview pre code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; background: transparent; padding: 0; color: var(--vscode-editor-foreground, #24292f); }
+        #marked-preview code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); padding: 2px 6px; border-radius: 4px; }
+        #source-editor-container { width: 100%; height: 100%; display: none; background: var(--vscode-editor-background); }
+        .source-editor-wrapper { display: flex; width: 100%; height: 100%; }
+        .source-line-numbers { width: 4em; min-width: 4em; padding: 20px 14px 20px 16px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; line-height: ${lineHeightSource}; color: var(--vscode-editorLineNumber-foreground, #6e7681); text-align: right; user-select: none; overflow-y: auto; overflow-x: hidden; border-right: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.1)); white-space: pre; box-sizing: border-box; }
+        #source-textarea { flex: 1; min-width: 0; border: none; outline: none; padding: 20px 20px 20px 18px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; background: transparent; color: var(--vscode-editor-foreground); resize: none; line-height: ${lineHeightSource}; }
+        .cora-selection-toolbar { position: absolute; top: 8px; right: 16px; z-index: 100; display: none; flex: none; background: var(--vscode-editorWidget-background, #f3f4f6); border: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.12)); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2px 4px; font-size: 12px; }
+        .cora-selection-toolbar.visible { display: flex; align-items: center; gap: 4px; }
+        .cora-selection-toolbar button { padding: 4px 10px; border: none; border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="mode-switch-wrapper">
+            <div id="tab-visual" class="mode-tab active">预览</div>
+            <div id="tab-source" class="mode-tab">Markdown</div>
+        </div>
+    </div>
+    <div class="content-area">
+        <div id="marked-preview-container" style="width:100%;height:100%;">
+            <div id="marked-preview"></div>
+        </div>
+        <div id="source-editor-container">
+            <div class="source-editor-wrapper" style="position: relative;">
+                <div id="source-line-numbers" class="source-line-numbers">1</div>
+                <textarea id="source-textarea" spellcheck="false"></textarea>
+                <div id="cora-selection-toolbar" class="cora-selection-toolbar" aria-hidden="true">
+                    <button type="button" id="cora-add-to-chat-btn">Add to Chat ⌘L</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
+    <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
+    <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
+</body>
+</html>`;
+    }
+
     /**
      * 生成 Milkdown 集成 HTML
      */
     private generateHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
+        if (this.containsHtmlBlock(markdown)) {
+            return this.generateMarkedOnlyHtml(markdown, uri, webview);
+        }
         const extensionUri = this.context.extensionUri;
         const editorJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor.js'));
         const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
@@ -289,24 +424,55 @@ export class PreviewProvider {
         .milkdown .editor:focus {
             outline: none !important;
         }
-        /* 表格样式 - 紧凑显示 */
+        /* 表格样式 - 表头浅灰底、常规字重、底部分隔线；数据行白底，链接蓝色下划线 */
         .milkdown table {
             border-collapse: collapse;
             width: 100%;
             margin: 16px 0;
-            border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
+            border: 1px solid var(--vscode-widget-border, #e1e4e8);
             font-size: 14px;
             line-height: 1.35;
-            background: transparent !important;
+            background: var(--vscode-editor-background, #fff) !important;
         }
         .milkdown th, .milkdown td {
-            border: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.1));
-            padding: 4px 10px;
+            border: 1px solid var(--vscode-widget-border, #e1e4e8);
+            padding: 8px 12px;
             text-align: left;
-            background: transparent !important;
         }
         .milkdown th {
-            font-weight: 600;
+            font-weight: normal;
+            background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa) !important;
+            color: var(--vscode-editor-foreground, #24292f);
+        }
+        .milkdown td {
+            background: var(--vscode-editor-background, #fff) !important;
+        }
+        .milkdown td a {
+            color: #0969da;
+            text-decoration: underline;
+        }
+        /* 代码块 - 浅灰底、圆角、等宽字体、内边距与行高 */
+        .milkdown pre {
+            background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa) !important;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin: 16px 0;
+            overflow: auto;
+            line-height: 1.45;
+            border: 1px solid var(--vscode-widget-border, #e1e4e8);
+        }
+        .milkdown pre code {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace !important;
+            font-size: 13px;
+            background: transparent !important;
+            padding: 0;
+        }
+        .milkdown :not(pre) > code {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace !important;
+            font-size: 0.9em;
+            background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa);
+            padding: 2px 6px;
+            border-radius: 4px;
         }
 
         /* 顶部工具栏 - 独立固定高度 */
@@ -373,9 +539,9 @@ export class PreviewProvider {
             height: 100%;
         }
         .source-line-numbers {
-            width: 3em;
-            min-width: 3em;
-            padding: 20px 8px 20px 16px;
+            width: 4em;
+            min-width: 4em;
+            padding: 20px 14px 20px 16px;
             font-family: ${targetFontFamily} !important;
             font-size: ${fontSize}px !important;
             line-height: ${lineHeightSource};
@@ -398,7 +564,7 @@ export class PreviewProvider {
             min-width: 0;
             border: none;
             outline: none;
-            padding: 20px 20px 20px 12px;
+            padding: 20px 20px 20px 18px;
             font-family: ${targetFontFamily} !important;
             font-size: ${fontSize}px !important; /* 应用动态字号 */
             background: transparent;
