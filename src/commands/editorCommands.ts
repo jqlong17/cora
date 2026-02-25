@@ -78,6 +78,24 @@ export async function togglePreviewEditor(
     }
 }
 
+export async function selectFont(previewProvider?: PreviewProvider): Promise<void> {
+    const fonts = ["Cascadia Mono", "Google Sans", "IBM Plex Mono", "Noto Sans SC", "System"];
+    const config = vscode.workspace.getConfiguration('knowledgeBase');
+    const currentFont = config.get<string>('fontFamily');
+
+    const result = await vscode.window.showQuickPick(fonts, {
+        placeHolder: `选择编辑器字体 (当前: ${currentFont})`,
+        title: '字体设置'
+    });
+
+    if (result) {
+        await config.update('fontFamily', result, vscode.ConfigurationTarget.Global);
+        if (previewProvider && previewProvider.hasOpenPanel()) {
+            await previewProvider.updatePreview();
+        }
+    }
+}
+
 // Helper function to extract URI from a tab
 function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
     const input = tab.input as any;

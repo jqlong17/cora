@@ -108,9 +108,9 @@
         "icon": "$(open-preview)"
       },
       {
-        "command": "knowledgeBase.openEditor",
-        "title": "打开编辑",
-        "icon": "$(edit)"
+        "command": "knowledgeBase.selectFont",
+        "title": "字体设置",
+        "icon": "$(case-sensitive)"
       },
       {
         "command": "knowledgeBase.newNote",
@@ -162,11 +162,6 @@
         "icon": "$(copy)"
       },
       {
-        "command": "knowledgeBase.copyFile",
-        "title": "复制文件",
-        "icon": "$(files)"
-      },
-      {
         "command": "knowledgeBase.searchNotes",
         "title": "搜索笔记",
         "icon": "$(search)"
@@ -185,12 +180,7 @@
     "menus": {
       "editor/title": [
         {
-          "command": "knowledgeBase.openPreview",
-          "when": "editorLangId == markdown && activeWebviewPanelId != 'coraPreview'",
-          "group": "navigation@1"
-        },
-        {
-          "command": "knowledgeBase.openEditor",
+          "command": "knowledgeBase.selectFont",
           "when": "activeWebviewPanelId == 'coraPreview'",
           "group": "navigation@1"
         }
@@ -287,11 +277,6 @@
           "command": "knowledgeBase.copyRelativePath",
           "when": "view == pageTree",
           "group": "3_file@3"
-        },
-        {
-          "command": "knowledgeBase.copyFile",
-          "when": "view == pageTree",
-          "group": "3_file@4"
         }
       ]
     },
@@ -368,6 +353,25 @@
             "创建时间 (从旧到新)"
           ],
           "description": "页面树的排序方式"
+        },
+        "knowledgeBase.fontFamily": {
+          "type": "string",
+          "default": "Cascadia Mono",
+          "enum": [
+            "Cascadia Mono",
+            "Google Sans",
+            "IBM Plex Mono",
+            "Noto Sans SC",
+            "System"
+          ],
+          "description": "编辑器使用的字体系列"
+        },
+        "knowledgeBase.fontSize": {
+          "type": "number",
+          "default": 17,
+          "minimum": 12,
+          "maximum": 30,
+          "description": "编辑器使用的字体大小 (px)"
         }
       }
     },

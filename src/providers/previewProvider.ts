@@ -113,6 +113,32 @@ export class PreviewProvider {
         const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
         const bundleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'milkdown.bundle.js'));
 
+        const fontCascadiaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
+        const fontGoogleSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
+        const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
+        const fontNotoSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+
+        const config = vscode.workspace.getConfiguration('knowledgeBase');
+        const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
+        const fontSize = config.get<number>('fontSize', 17);
+
+        let fontCss = '';
+        let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+        if (fontFamily === 'Cascadia Mono') {
+            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            targetFontFamily = "'Cascadia Mono Custom', monospace";
+        } else if (fontFamily === 'Google Sans') {
+            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            targetFontFamily = "'Google Sans Custom', sans-serif";
+        } else if (fontFamily === 'IBM Plex Mono') {
+            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            targetFontFamily = "'IBM Plex Mono Custom', monospace";
+        } else if (fontFamily === 'Noto Sans SC') {
+            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; }`;
+            targetFontFamily = "'Noto Sans SC Custom', sans-serif";
+        }
+
         const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
 
         return `<!DOCTYPE html>
@@ -120,32 +146,36 @@ export class PreviewProvider {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; script-src 'unsafe-inline' https: vscode-resource: vscode-webview-resource:; img-src https: data: vscode-resource: vscode-webview-resource:; connect-src https:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'unsafe-inline' https: vscode-resource: vscode-webview-resource:; img-src https: data: vscode-resource: vscode-webview-resource:; connect-src https:;">
     <title>Cora Editor</title>
     <script>window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
     <style>
+        ${fontCss}
         body {
-            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+            font-family: ${targetFontFamily};
             background: var(--vscode-editor-background, #fff);
             color: var(--vscode-editor-foreground, #24292f);
             margin: 0;
-            padding: 40px;
-            overflow-x: hidden;
+            padding: 0;
+            overflow: hidden; /* 核心修复：禁止 body 滚动 */
             -webkit-font-smoothing: antialiased;
         }
         #editor {
             max-width: 860px;
             margin: 0 auto;
-            min-height: 100vh;
+            min-height: calc(100vh - 48px);
+            padding: 40px;
+            font-family: ${targetFontFamily} !important;
         }
         .milkdown {
             box-shadow: none !important;
             background: transparent !important;
-            font-size: 16px;
+            font-size: ${fontSize}px !important; /* 应用动态字号 */
             border: none !important;
             outline: none !important;
         }
         .milkdown .editor {
+            font-family: ${targetFontFamily} !important; /* 强制应用字体 */
             padding: 0 !important;
             line-height: 1.8 !important;
             outline: none !important;
@@ -238,8 +268,8 @@ export class PreviewProvider {
             border: none;
             outline: none;
             padding: 40px;
-            font-family: var(--vscode-editor-font-family, "Fira Code", monospace);
-            font-size: var(--vscode-editor-font-size, 14px);
+            font-family: ${targetFontFamily} !important;
+            font-size: ${fontSize}px !important; /* 应用动态字号 */
             background: transparent;
             color: var(--vscode-editor-foreground);
             resize: none;

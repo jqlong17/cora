@@ -82,6 +82,9 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         vscode.commands.registerCommand('knowledgeBase.togglePreviewEditor', () => {
             commands.togglePreviewEditor(c.previewProvider);
         }),
+        vscode.commands.registerCommand('knowledgeBase.selectFont', async () => {
+            await commands.selectFont(c.previewProvider);
+        }),
 
         // ── 大纲 ──
         vscode.commands.registerCommand('knowledgeBase.gotoHeading', (line: number, documentUriStr?: string) => {
@@ -97,9 +100,6 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         }),
         vscode.commands.registerCommand('knowledgeBase.copyRelativePath', (item) => {
             commands.copyRelativePath(item);
-        }),
-        vscode.commands.registerCommand('knowledgeBase.copyFile', (item) => {
-            commands.copyFile(item, c.fileService);
         }),
 
         // ── 搜索 ──
