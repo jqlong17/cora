@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { marked } from 'marked';
 
 /**
@@ -42,13 +43,14 @@ export class PreviewProvider {
 
         this.pendingScrollLine = line;
 
+        const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri);
         this.panel = vscode.window.createWebviewPanel(
             'coraPreview',
             `${fileName} (Edit)`,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                localResourceRoots: [this.context.extensionUri],
+                localResourceRoots: [this.context.extensionUri, ...workspaceFolders],
                 retainContextWhenHidden: true
             }
         );
@@ -78,21 +80,24 @@ export class PreviewProvider {
             }
 
             if (msg.command === 'editorUpdate' && typeof msg.content === 'string') {
-                this.onContentChanged?.(this.currentUri, msg.content);
+                const uriToSave = this.currentUri;
+                if (!uriToSave) return;
+                this.onContentChanged?.(uriToSave, msg.content);
 
                 if (this.saveTimeout) clearTimeout(this.saveTimeout);
+                const contentToSave = msg.content;
                 this.saveTimeout = setTimeout(async () => {
-                    if (this.currentUri && msg.content !== this.lastSavedContent) {
-                        try {
-                            await vscode.workspace.fs.writeFile(
-                                this.currentUri,
-                                new TextEncoder().encode(msg.content)
-                            );
-                            this.lastSavedContent = msg.content;
-                            // 注意：不建议在这里调用 onDocumentSaved 触发全量刷新，因为 Milkdown 会处理局部显示
-                        } catch (e) {
-                            console.error('Auto-save failed:', e);
+                    try {
+                        if (contentToSave === this.lastSavedContent) return;
+                        await vscode.workspace.fs.writeFile(
+                            uriToSave,
+                            new TextEncoder().encode(contentToSave)
+                        );
+                        if (this.currentUri?.toString() === uriToSave.toString()) {
+                            this.lastSavedContent = contentToSave;
                         }
+                    } catch (e) {
+                        console.error('Auto-save failed:', e);
                     }
                 }, 800);
             }
@@ -117,21 +122,27 @@ export class PreviewProvider {
      */
     async updateContentOnly(): Promise<void> {
         if (!this.panel || !this.currentUri) return;
+        const uriForThisUpdate = this.currentUri;
         try {
-            const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
+            const content = await fs.promises.readFile(uriForThisUpdate.fsPath, 'utf8');
+            if (this.currentUri?.toString() !== uriForThisUpdate.toString()) return;
             this.lastSavedContent = content;
             const newMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
             if (newMode !== this.currentPreviewMode) {
                 await this.updatePreview();
                 return;
             }
-            const payload: { command: string; content: string; uri: string; renderedHtml?: string } = {
+            const payload: { command: string; content: string; uri: string; renderedHtml?: string; imageMap?: Record<string, string> } = {
                 command: 'updateContent',
                 content,
-                uri: this.currentUri.toString()
+                uri: uriForThisUpdate.toString()
             };
             if (newMode === 'marked') {
-                payload.renderedHtml = this.sanitizeHtml(marked.parse(content) as string);
+                let html = marked.parse(content) as string;
+                html = this.rewriteHtmlImageUrls(html, uriForThisUpdate, this.panel.webview);
+                payload.renderedHtml = this.sanitizeHtml(html);
+            } else {
+                payload.imageMap = this.buildImageMap(content, uriForThisUpdate, this.panel.webview);
             }
             this.panel.webview.postMessage(payload);
         } catch (error) {
@@ -144,15 +155,16 @@ export class PreviewProvider {
      */
     async updatePreview(): Promise<void> {
         if (!this.panel || !this.currentUri) return;
-
+        const uriForThisLoad = this.currentUri;
         try {
-            const content = await fs.promises.readFile(this.currentUri.fsPath, 'utf8');
+            const content = await fs.promises.readFile(uriForThisLoad.fsPath, 'utf8');
+            if (this.currentUri?.toString() !== uriForThisLoad.toString()) return;
             this.lastSavedContent = content;
             this.currentPreviewMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
-            this.panel.webview.html = this.generateHtml(content, this.currentUri, this.panel.webview);
+            this.panel.webview.html = this.generateHtml(content, uriForThisLoad, this.panel.webview);
         } catch (error) {
             console.error('Error loading editor:', error);
-            this.panel.webview.html = this.getErrorHtml('无法加载编辑器资源');
+            if (this.panel) this.panel.webview.html = this.getErrorHtml('无法加载编辑器资源');
         }
     }
 
@@ -235,6 +247,48 @@ export class PreviewProvider {
         return out;
     }
 
+    /** 判断是否为相对路径（非 http/https/data 等），需重写为 webview URI */
+    private isRelativeImageSrc(href: string): boolean {
+        const t = href.trim();
+        return t.length > 0 && !/^https?:\/\//i.test(t) && !/^data:/i.test(t) && !/^#/.test(t);
+    }
+
+    /** 收集 Markdown 中相对路径图片的映射表 (relativePath -> webviewUri)，供前端替换 img 用，不改写文档内容 */
+    private buildImageMap(markdown: string, documentUri: vscode.Uri, webview: vscode.Webview): Record<string, string> {
+        const baseDir = path.dirname(documentUri.fsPath);
+        const map: Record<string, string> = {};
+        const seen = new Set<string>();
+        markdown.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, _alt, src) => {
+            const raw = src.trim();
+            if (!this.isRelativeImageSrc(raw) || seen.has(raw)) return '';
+            seen.add(raw);
+            try {
+                const absolutePath = path.resolve(baseDir, raw);
+                if (fs.existsSync(absolutePath)) {
+                    map[raw] = webview.asWebviewUri(vscode.Uri.file(absolutePath)).toString();
+                }
+            } catch { /* ignore */ }
+            return '';
+        });
+        return map;
+    }
+
+    /** 将 HTML 中相对路径的 img src 重写为 webview 可访问的 URI */
+    private rewriteHtmlImageUrls(html: string, documentUri: vscode.Uri, webview: vscode.Webview): string {
+        const baseDir = path.dirname(documentUri.fsPath);
+        return html.replace(/<img([^>]*)\ssrc=["']([^"']+)["']/gi, (match, attrs, src) => {
+            if (!this.isRelativeImageSrc(src)) return match;
+            try {
+                const absolutePath = path.resolve(baseDir, src.trim());
+                if (!fs.existsSync(absolutePath)) return match;
+                const webviewUri = webview.asWebviewUri(vscode.Uri.file(absolutePath));
+                return `<img${attrs} src="${webviewUri.toString()}"`;
+            } catch {
+                return match;
+            }
+        });
+    }
+
     /**
      * 生成 Marked 只读预览 HTML（方案二：含 HTML 的 md 用 marked 渲染，编辑仅源码）
      */
@@ -270,7 +324,9 @@ export class PreviewProvider {
         }
 
         const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
-        const renderedHtml = this.sanitizeHtml(marked.parse(markdown) as string);
+        let renderedHtml = marked.parse(markdown) as string;
+        renderedHtml = this.rewriteHtmlImageUrls(renderedHtml, uri, webview);
+        renderedHtml = this.sanitizeHtml(renderedHtml);
         const initialRenderedJson = JSON.stringify(renderedHtml).replace(/<\/script>/gi, '\\u003c/script>');
 
         return `<!DOCTYPE html>
@@ -380,6 +436,8 @@ export class PreviewProvider {
         }
 
         const initialMarkdownJson = JSON.stringify(markdown).replace(/<\/script>/gi, '\\u003c/script>');
+        const imageMap = this.buildImageMap(markdown, uri, webview);
+        const initialImageMapJson = JSON.stringify(imageMap).replace(/<\/script>/gi, '\\u003c/script>');
 
         return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -388,7 +446,7 @@ export class PreviewProvider {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: data: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
+    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson};</script>
     <style>
         ${fontCss}
         body {

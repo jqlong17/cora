@@ -279,11 +279,26 @@ async function initEditor() {
 
         window.editor = editor;
 
+        function applyImageMap(container, imageMap) {
+            if (!container || !imageMap || Object.keys(imageMap).length === 0) return;
+            const editorDom = container.querySelector && container.querySelector('.milkdown .editor') || container;
+            const imgs = editorDom.querySelectorAll ? editorDom.querySelectorAll('img[src]') : [];
+            imgs.forEach((img) => {
+                const raw = img.getAttribute('src');
+                if (raw && imageMap[raw]) {
+                    img.src = imageMap[raw];
+                }
+            });
+        }
+
+        const initialImageMap = typeof window.__CORA_IMAGE_MAP__ !== 'undefined' ? window.__CORA_IMAGE_MAP__ : {};
+        setTimeout(() => applyImageMap(editorElement, initialImageMap), 100);
+
         // 监听来自宿主的跳转指令
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'updateContent') {
-                const { content } = message;
+                const { content, imageMap } = message;
                 currentMarkdown = content;
                 debug('收到热更新内容');
 
@@ -292,6 +307,7 @@ async function initEditor() {
                     updateSourceLineNumbers();
                 } else if (window.editor) {
                     window.editor.action(replaceAll(content));
+                    setTimeout(() => applyImageMap(editorElement, imageMap || {}), 50);
                 }
                 return;
             }

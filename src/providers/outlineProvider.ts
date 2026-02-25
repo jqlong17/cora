@@ -79,14 +79,20 @@ export class OutlineProvider implements vscode.TreeDataProvider<OutlineItem> {
     }
 
     /**
-     * 编辑器内容变化时调用，带 300ms 防抖，防止每次按键都触发全量解析和并发竞争
+     * 编辑器内容变化时调用，带 300ms 防抖，防止每次按键都触发全量解析和并发竞争。
+     * 回调执行时若当前活动编辑器已切换为其他文档，则不再用旧 editor 更新，避免大纲显示错乱。
      */
     updateForEditor(editor: vscode.TextEditor): void {
         if (this.debounceTimer) {
             clearTimeout(this.debounceTimer);
         }
+        const documentUriStr = editor.document.uri.toString();
         this.debounceTimer = setTimeout(() => {
             this.debounceTimer = undefined;
+            const active = vscode.window.activeTextEditor;
+            if (!active || active.document.uri.toString() !== documentUriStr) {
+                return;
+            }
             this.updateForDocument(editor.document, editor).catch(err => {
                 console.error('Outline updateForDocument failed:', err);
             });
