@@ -9,6 +9,9 @@ const lang = vscode.env.language;
 export const isChinese = (): boolean =>
     lang === 'zh-cn' || lang === 'zh-tw';
 
+/** 用于 HTML lang 属性，与界面语言一致 */
+export const htmlLang = (): string => (isChinese() ? 'zh-CN' : 'en');
+
 export type Messages = Record<string, Record<string, string>>;
 
 const zh: Messages = {
@@ -58,6 +61,8 @@ const zh: Messages = {
     },
     outline: {
         gotoHeading: '跳转到标题',
+        collapsedAll: '大纲已全部折叠',
+        expandedAll: '大纲已全部展开',
     },
     display: {
         fontFamily: '字体系列',
@@ -84,6 +89,10 @@ const zh: Messages = {
         loadError: '无法加载编辑器资源',
         lineRefSingle: '第{n}行',
         lineRefRange: '第{start}-{end}行',
+        addToChat: '加入对话 ⌘L',
+        panelTitleSuffix: ' （编辑）',
+        mermaidError: '图表语法错误',
+        mermaidLoading: '正在加载图表引擎...',
     },
     newNote: {
         untitledPrefix: '未命名笔记',
@@ -162,6 +171,8 @@ const en: Messages = {
     },
     outline: {
         gotoHeading: 'Go to Heading',
+        collapsedAll: 'Outline collapsed',
+        expandedAll: 'Outline expanded',
     },
     display: {
         fontFamily: 'Font family',
@@ -188,6 +199,10 @@ const en: Messages = {
         loadError: 'Failed to load editor resources',
         lineRefSingle: 'line {n}',
         lineRefRange: 'lines {start}-{end}',
+        addToChat: 'Add to Chat ⌘L',
+        panelTitleSuffix: ' (Edit)',
+        mermaidError: 'Diagram syntax error',
+        mermaidLoading: 'Loading diagram engine...',
     },
     newNote: {
         untitledPrefix: 'Untitled note',

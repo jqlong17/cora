@@ -208,10 +208,12 @@ async function initEditor() {
                         addToCache(hash, svg);
                         container.innerHTML = svg;
                     } catch (e) {
-                        container.innerHTML = `<pre style="color:red; font-size:12px;">图表语法错误: ${e.message}</pre>`;
+                        const errLabel = (window.__CORA_I18N__ && window.__CORA_I18N__.mermaidError) ? window.__CORA_I18N__.mermaidError : 'Diagram syntax error';
+                        container.innerHTML = '<pre style="color:red; font-size:12px;">' + errLabel + ': ' + (e.message || '') + '</pre>';
                     }
                 } else {
-                    container.innerHTML = '<pre>正在加载图表引擎...</pre>';
+                    const loadingLabel = (window.__CORA_I18N__ && window.__CORA_I18N__.mermaidLoading) ? window.__CORA_I18N__.mermaidLoading : 'Loading diagram engine...';
+                    container.innerHTML = '<pre>' + loadingLabel + '</pre>';
                 }
             };
 

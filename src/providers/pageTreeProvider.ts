@@ -61,6 +61,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     }
 
     refresh(): void {
+        this.fileService.clearFlatListCache();
         this._onDidChangeTreeData.fire();
     }
 

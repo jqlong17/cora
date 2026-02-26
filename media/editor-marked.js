@@ -177,7 +177,8 @@
                         if (pre.parentNode) pre.parentNode.replaceChild(wrap, pre);
                     }).catch(function (err) {
                         if (pre.parentNode) {
-                            pre.innerHTML = '<code style="color:red;font-size:12px;">' + (err.message || 'Mermaid error') + '</code>';
+                            var errLabel = (err && err.message) ? err.message : ((window.__CORA_I18N__ && window.__CORA_I18N__.mermaidError) ? window.__CORA_I18N__.mermaidError : 'Mermaid error');
+                        pre.innerHTML = '<code style="color:red;font-size:12px;">' + errLabel + '</code>';
                         }
                     });
                 });

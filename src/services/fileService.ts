@@ -10,8 +10,16 @@ export interface FileItem {
     name: string;
 }
 
+const FLAT_LIST_CACHE_TTL_MS = 30_000;
+
 export class FileService {
+    private flatListCache: { key: string; result: FileItem[]; timestamp: number } | null = null;
+
     constructor(private configService: ConfigService) { }
+
+    clearFlatListCache(): void {
+        this.flatListCache = null;
+    }
 
     getWorkspaceFolders(): readonly vscode.WorkspaceFolder[] {
         return vscode.workspace.workspaceFolders || [];
@@ -45,62 +53,40 @@ export class FileService {
             const filterMode = this.configService.getFilterMode();
             const markdownExtensions = this.configService.getMarkdownExtensions();
 
-            const items: (FileItem & { mtime: number; ctime: number })[] = [];
-
+            type EntryInfo = { entry: fs.Dirent; entryPath: string; entryUri: vscode.Uri; isDir: boolean };
+            const toStat: EntryInfo[] = [];
             for (const entry of entries) {
-                // Skip hidden files and folders
                 if (entry.name.startsWith('.')) {
                     continue;
                 }
-
+                if (entry.isDirectory() && entry.name === '.git') {
+                    continue;
+                }
                 const entryPath = path.join(targetUri.fsPath, entry.name);
                 const entryUri = vscode.Uri.file(entryPath);
-
-                if (entry.isDirectory()) {
-                    try {
-                        const stat = await fs.promises.stat(entryPath);
-                        items.push({
-                            uri: entryUri,
-                            type: 'directory',
-                            name: entry.name,
-                            mtime: stat.mtimeMs,
-                            ctime: stat.birthtimeMs
-                        });
-                    } catch {
-                        items.push({
-                            uri: entryUri,
-                            type: 'directory',
-                            name: entry.name,
-                            mtime: 0,
-                            ctime: 0
-                        });
-                    }
-                } else if (entry.isFile()) {
-                    // Apply filter
-                    if (filterMode === 'markdown') {
-                        if (!isMarkdownFile(entry.name, markdownExtensions)) {
-                            continue;
-                        }
-                    }
-                    try {
-                        const stat = await fs.promises.stat(entryPath);
-                        items.push({
-                            uri: entryUri,
-                            type: 'file',
-                            name: entry.name,
-                            mtime: stat.mtimeMs,
-                            ctime: stat.birthtimeMs
-                        });
-                    } catch {
-                        items.push({
-                            uri: entryUri,
-                            type: 'file',
-                            name: entry.name,
-                            mtime: 0,
-                            ctime: 0
-                        });
-                    }
+                if (entry.isFile() && filterMode === 'markdown' && !isMarkdownFile(entry.name, markdownExtensions)) {
+                    continue;
                 }
+                toStat.push({ entry, entryPath, entryUri, isDir: entry.isDirectory() });
+            }
+
+            const stats = await Promise.all(
+                toStat.map(({ entryPath }) => fs.promises.stat(entryPath).catch(() => null))
+            );
+
+            const items: (FileItem & { mtime: number; ctime: number })[] = [];
+            for (let i = 0; i < toStat.length; i++) {
+                const { entry, entryUri, isDir } = toStat[i];
+                const stat = stats[i];
+                const mtime = stat ? stat.mtimeMs : 0;
+                const ctime = stat ? stat.birthtimeMs : 0;
+                items.push({
+                    uri: entryUri,
+                    type: isDir ? 'directory' : 'file',
+                    name: entry.name,
+                    mtime,
+                    ctime
+                });
             }
 
             // Sort: directories first, then files, then apply user sort order within each group
@@ -128,7 +114,7 @@ export class FileService {
 
     /**
      * 递归收集所有文件（按 filterMode 筛选：仅 MD 或全部），按配置排序。用于平铺视图。
-     * 树状、平铺、收藏共用同一套筛选与排序逻辑。
+     * 结果带短期缓存（key = workspace + sortOrder + filterMode，TTL 30s），刷新/配置/文件变更时需 clearFlatListCache()。
      */
     async getAllFilesSortedByConfig(): Promise<FileItem[]> {
         const folders = this.getWorkspaceFolders();
@@ -136,8 +122,14 @@ export class FileService {
             return [];
         }
         const filterMode = this.configService.getFilterMode();
-        const markdownExtensions = this.configService.getMarkdownExtensions();
         const sortOrder = this.configService.getSortOrder();
+        const key = folders.map(f => f.uri.toString()).sort().join('\0') + '\0' + sortOrder + '\0' + filterMode;
+        const now = Date.now();
+        if (this.flatListCache !== null && this.flatListCache.key === key && (now - this.flatListCache.timestamp) < FLAT_LIST_CACHE_TTL_MS) {
+            return this.flatListCache.result.map(item => ({ ...item }));
+        }
+
+        const markdownExtensions = this.configService.getMarkdownExtensions();
         const collected: { uri: vscode.Uri; name: string; mtime: number; ctime: number }[] = [];
 
         const collectFromDir = async (dirPath: string): Promise<void> => {
@@ -152,6 +144,9 @@ export class FileService {
                         continue;
                     }
                     if (entry.isDirectory()) {
+                        if (entry.name === '.git') {
+                            continue;
+                        }
                         await collectFromDir(fullPath);
                     } else if (entry.isFile()) {
                         if (filterMode === 'markdown' && !isMarkdownFile(entry.name, markdownExtensions)) {
@@ -191,11 +186,13 @@ export class FileService {
             }
         });
 
-        return collected.map(({ uri, name }) => ({
+        const result = collected.map(({ uri, name }) => ({
             uri,
             type: 'file' as const,
             name
         }));
+        this.flatListCache = { key, result, timestamp: Date.now() };
+        return result;
     }
 
     async createFile(parentUri: vscode.Uri, fileName: string): Promise<vscode.Uri | null> {

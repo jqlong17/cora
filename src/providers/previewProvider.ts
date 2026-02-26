@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
-import { t } from '../utils/i18n';
+import { t, htmlLang } from '../utils/i18n';
 
 /**
  * 自定义 Markdown 预览提供者 (Typora 实时编辑模式)
@@ -31,7 +31,7 @@ export class PreviewProvider {
         const fileName = uri.path.split('/').pop() || 'Preview';
 
         if (this.panel) {
-            this.panel.title = `${fileName} (Edit)`;
+            this.panel.title = `${fileName}${t('preview.panelTitleSuffix')}`;
             // 如果面板已经打开，且我们只是切换文件或刷新，则使用异步消息更新内容，避免重载整个 HTML
             await this.updateContentOnly();
             this.panel.reveal(vscode.ViewColumn.One);
@@ -47,7 +47,7 @@ export class PreviewProvider {
         const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri);
         this.panel = vscode.window.createWebviewPanel(
             'coraPreview',
-            `${fileName} (Edit)`,
+            `${fileName}${t('preview.panelTitleSuffix')}`,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -175,6 +175,18 @@ export class PreviewProvider {
         if (this.panel) {
             this.panel.dispose();
             this.panel = undefined;
+        }
+    }
+
+    /**
+     * 供 Custom Editor 使用：根据 uri 和 webview 生成预览 HTML（读文件后调用 generateHtml）
+     */
+    async getPreviewHtml(uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+        try {
+            const content = await fs.promises.readFile(uri.fsPath, 'utf8');
+            return this.generateHtml(content, uri, webview);
+        } catch {
+            return this.getErrorHtml(t('preview.loadError'));
         }
     }
 
@@ -333,8 +345,10 @@ export class PreviewProvider {
         const tabPreview = t('preview.tabPreview');
         const tabMarkdown = t('preview.tabMarkdown');
 
+        const addToChatLabel = t('preview.addToChat');
+        const i18nMermaid = JSON.stringify({ mermaidError: t('preview.mermaidError'), mermaidLoading: t('preview.mermaidLoading') }).replace(/<\/script>/gi, '\\u003c/script>');
         return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${htmlLang()}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -386,14 +400,14 @@ export class PreviewProvider {
                 <div id="source-line-numbers" class="source-line-numbers">1</div>
                 <textarea id="source-textarea" spellcheck="false"></textarea>
                 <div id="cora-selection-toolbar" class="cora-selection-toolbar" aria-hidden="true">
-                    <button type="button" id="cora-add-to-chat-btn">Add to Chat ⌘L</button>
+                    <button type="button" id="cora-add-to-chat-btn">${addToChatLabel}</button>
                 </div>
             </div>
         </div>
     </div>
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
-    <script nonce="${nonce}">window.__CORA_MERMAID__ = "${mermaidJsUri}";</script>
+    <script nonce="${nonce}">window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_I18N__ = ${i18nMermaid};</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
 </html>`;
@@ -446,16 +460,18 @@ export class PreviewProvider {
         const initialImageMapJson = JSON.stringify(imageMap).replace(/<\/script>/gi, '\\u003c/script>');
         const tabPreview = t('preview.tabPreview');
         const tabMarkdown = t('preview.tabMarkdown');
+        const addToChatLabel = t('preview.addToChat');
+        const i18nMermaid = JSON.stringify({ mermaidError: t('preview.mermaidError'), mermaidLoading: t('preview.mermaidLoading') }).replace(/<\/script>/gi, '\\u003c/script>');
 
         return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${htmlLang()}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson};</script>
+    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
     <style>
         ${fontCss}
         body {
@@ -697,7 +713,7 @@ export class PreviewProvider {
                 <div id="source-line-numbers" class="source-line-numbers">1</div>
                 <textarea id="source-textarea" spellcheck="false"></textarea>
                 <div id="cora-selection-toolbar" class="cora-selection-toolbar" aria-hidden="true">
-                    <button type="button" id="cora-add-to-chat-btn">Add to Chat ⌘L</button>
+                    <button type="button" id="cora-add-to-chat-btn">${addToChatLabel}</button>
                 </div>
             </div>
         </div>
@@ -711,7 +727,7 @@ export class PreviewProvider {
 
     private getErrorHtml(message: string): string {
         return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${htmlLang()}">
 <head>
     <meta charset="UTF-8">
     <title>Error</title>

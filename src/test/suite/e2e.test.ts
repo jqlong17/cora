@@ -214,6 +214,32 @@ suite('Cora E2E Test Suite', () => {
             }
         });
 
+        test('flat view: after refresh, new file appears in list', async function() {
+            if (!vscode.workspace.workspaceFolders?.length) {
+                this.skip();
+                return;
+            }
+            const uniqueName = `e2e-flat-refresh-${Date.now()}.md`;
+            const parentUri = vscode.Uri.file(testWorkspacePath);
+            const created = await fileService.createFile(parentUri, uniqueName);
+            if (!created) {
+                this.skip();
+                return;
+            }
+            try {
+                pageTreeProvider.refresh();
+                await configService.setPageViewMode('flat');
+                pageTreeProvider.refresh();
+                const children = await pageTreeProvider.getChildren();
+                const labels = children.map(c => pageTreeProvider.getTreeItem(c).label);
+                assert.ok(labels.includes(uniqueName), 'After refresh, flat view should list the newly created file');
+            } finally {
+                await fileService.deleteItem(created);
+            }
+            await configService.setPageViewMode('tree');
+            pageTreeProvider.refresh();
+        });
+
         test('favorites view: empty when no favorites', async function() {
             if (!vscode.workspace.workspaceFolders?.length) {
                 this.skip();

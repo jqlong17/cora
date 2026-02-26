@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "%extension.description%",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -46,7 +46,7 @@
           "id": "pageTree",
           "name": "%view.pages%",
           "when": "true",
-          "size": 2
+          "size": 1
         },
         {
           "id": "kbOutline",
@@ -431,6 +431,18 @@
         }
       }
     },
+    "customEditors": [
+      {
+        "viewType": "cora.markdown.preview",
+        "displayName": "Cora Preview",
+        "selector": [
+          { "filenamePattern": "*.md" },
+          { "filenamePattern": "*.markdown" },
+          { "filenamePattern": "*.mdx" }
+        ],
+        "priority": "option"
+      }
+    ],
     "keybindings": [
       {
         "command": "knowledgeBase.openPreview",

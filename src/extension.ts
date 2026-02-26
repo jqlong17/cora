@@ -8,7 +8,8 @@ import { FavoritesService } from './services/favoritesService';
 import { OutlineService } from './services/outlineService';
 import { ConfigService } from './services/configService';
 import { registerCommands, ServiceContainer } from './commands/registerCommands';
-import { registerListeners } from './listeners/registerListeners';
+import { registerListeners, syncEditorAssociationsForPreviewOnClick } from './listeners/registerListeners';
+import { CoraMarkdownEditorProvider, CORA_MARKDOWN_VIEW_TYPE } from './editors/coraMarkdownEditorProvider';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Cora 插件已激活');
@@ -71,7 +72,21 @@ export function activate(context: vscode.ExtensionContext) {
     registerCommands(context, container);
     registerListeners(context, container);
 
-    // ── 5. 初始化当前编辑器的大纲 ──
+    // ── 5. 注册 Markdown Custom Editor（供「从链接/资源管理器打开即用 Cora 预览」） ──
+    const coraMarkdownProvider = new CoraMarkdownEditorProvider(context, previewProvider);
+    context.subscriptions.push(
+        vscode.window.registerCustomEditorProvider(
+            CORA_MARKDOWN_VIEW_TYPE,
+            coraMarkdownProvider,
+            {
+                webviewOptions: { retainContextWhenHidden: true },
+                supportsMultipleEditorsPerDocument: false
+            }
+        )
+    );
+    syncEditorAssociationsForPreviewOnClick(configService);
+
+    // ── 6. 初始化当前编辑器的大纲 ──
     if (vscode.window.activeTextEditor) {
         container.lastKnownUri = vscode.window.activeTextEditor.document.uri;
         outlineProvider.updateForEditor(vscode.window.activeTextEditor);
