@@ -3,6 +3,7 @@ import { PageTreeProvider, PageTreeItem } from '../providers/pageTreeProvider';
 import { OutlineProvider } from '../providers/outlineProvider';
 import { PreviewProvider } from '../providers/previewProvider';
 import { SearchProvider } from '../providers/searchProvider';
+import { CoraWikiProvider } from '../providers/coraWikiProvider';
 import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { FavoritesService } from '../services/favoritesService';
@@ -17,6 +18,7 @@ export interface ServiceContainer {
     outlineProvider: OutlineProvider;
     previewProvider: PreviewProvider;
     searchProvider: SearchProvider;
+    coraWikiProvider: CoraWikiProvider;
     pageTreeView: vscode.TreeView<PageTreeItem>;
     lastKnownUri: vscode.Uri | undefined;
 }
@@ -131,6 +133,9 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         vscode.commands.registerCommand('knowledgeBase.clearSearch', () => {
             c.searchProvider.clear();
             vscode.window.showInformationMessage(t('search.cleared'));
+        }),
+        vscode.commands.registerCommand('knowledgeBase.startCoraWikiResearch', () => {
+            void commands.startCoraWikiResearch(c.coraWikiProvider);
         })
     );
 }

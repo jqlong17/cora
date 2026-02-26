@@ -3,6 +3,7 @@ import { PageTreeProvider } from './providers/pageTreeProvider';
 import { OutlineProvider } from './providers/outlineProvider';
 import { PreviewProvider } from './providers/previewProvider';
 import { SearchProvider } from './providers/searchProvider';
+import { CoraWikiProvider } from './providers/coraWikiProvider';
 import { FileService } from './services/fileService';
 import { FavoritesService } from './services/favoritesService';
 import { OutlineService } from './services/outlineService';
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
     const searchProvider = new SearchProvider(fileService, configService);
+    const coraWikiProvider = new CoraWikiProvider();
 
     // ── 3. 注册树视图 ──
     const pageTreeView = vscode.window.createTreeView('pageTree', {
@@ -50,11 +52,16 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: false,
         canSelectMany: false
     });
+    const coraWikiTreeView = vscode.window.createTreeView('coraWiki', {
+        treeDataProvider: coraWikiProvider,
+        showCollapseAll: false,
+        canSelectMany: false
+    });
 
     pageTreeProvider.setTreeView(pageTreeView);
     outlineProvider.setTreeView(outlineTreeView);
 
-    context.subscriptions.push(pageTreeView, outlineTreeView, searchTreeView);
+    context.subscriptions.push(pageTreeView, outlineTreeView, searchTreeView, coraWikiTreeView);
 
     // ── 4. 构建服务容器 & 注册命令 / 监听器 ──
     const container: ServiceContainer = {
@@ -65,6 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
         outlineProvider,
         previewProvider,
         searchProvider,
+        coraWikiProvider,
         pageTreeView,
         lastKnownUri: undefined
     };

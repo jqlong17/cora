@@ -59,6 +59,12 @@
           "name": "%view.search%",
           "when": "true",
           "size": 1
+        },
+        {
+          "id": "coraWiki",
+          "name": "%view.coraWiki%",
+          "when": "true",
+          "size": 1
         }
       ]
     },
@@ -74,6 +80,10 @@
       {
         "view": "search",
         "contents": "%welcome.search%"
+      },
+      {
+        "view": "coraWiki",
+        "contents": "%welcome.coraWiki%"
       }
     ],
     "commands": [
@@ -195,6 +205,11 @@
         "command": "knowledgeBase.setSortOrder",
         "title": "%cmd.sort%",
         "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "knowledgeBase.startCoraWikiResearch",
+        "title": "%cmd.startCoraWikiResearch%",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -265,6 +280,11 @@
           "command": "knowledgeBase.clearSearch",
           "when": "view == search",
           "group": "navigation@2"
+        },
+        {
+          "command": "knowledgeBase.startCoraWikiResearch",
+          "when": "view == coraWiki",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -396,6 +416,70 @@
           ],
           "description": "%config.sortOrder.description%"
         },
+        "knowledgeBase.coraWiki.provider": {
+          "type": "string",
+          "default": "openai",
+          "enum": [
+            "kimi",
+            "openai",
+            "openrouter"
+          ],
+          "description": "%config.coraWiki.provider.description%"
+        },
+        "knowledgeBase.coraWiki.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "%config.coraWiki.baseUrl.description%"
+        },
+        "knowledgeBase.coraWiki.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "%config.coraWiki.model.description%"
+        },
+        "knowledgeBase.coraWiki.apiKeyEnvName": {
+          "type": "string",
+          "default": "OPENAI_API_KEY",
+          "description": "%config.coraWiki.apiKeyEnvName.description%"
+        },
+        "knowledgeBase.coraWiki.fallbackProvider": {
+          "type": "string",
+          "default": "openai",
+          "enum": [
+            "openai",
+            "openrouter",
+            "kimi"
+          ],
+          "description": "%config.coraWiki.fallbackProvider.description%"
+        },
+        "knowledgeBase.coraWiki.maxSteps": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "%config.coraWiki.maxSteps.description%"
+        },
+        "knowledgeBase.coraWiki.include": {
+          "type": "array",
+          "default": [],
+          "description": "%config.coraWiki.include.description%"
+        },
+        "knowledgeBase.coraWiki.exclude": {
+          "type": "array",
+          "default": [
+            ".git",
+            "node_modules",
+            "dist",
+            "build"
+          ],
+          "description": "%config.coraWiki.exclude.description%"
+        },
+        "knowledgeBase.coraWiki.cacheTtlSec": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "%config.coraWiki.cacheTtlSec.description%"
+        },
         "knowledgeBase.fontFamily": {
           "type": "string",
           "default": "Cascadia Mono",
@@ -486,6 +570,7 @@
   "dependencies": {
     "@types/marked": "^5.0.2",
     "marked": "^17.0.3",
-    "mermaid": "^11.12.3"
+    "mermaid": "^11.12.3",
+    "openai": "^6.5.0"
   }
 }

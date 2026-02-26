@@ -51,4 +51,40 @@ export class ConfigService {
     async setSortOrder(order: SortOrder): Promise<void> {
         await this.config.update(CONFIG_KEYS.SORT_ORDER, order, true);
     }
+
+    getCoraWikiProvider(): 'kimi' | 'openai' | 'openrouter' {
+        return this.config.get<'kimi' | 'openai' | 'openrouter'>(CONFIG_KEYS.CORA_WIKI_PROVIDER, 'openai');
+    }
+
+    getCoraWikiBaseUrl(): string {
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_BASE_URL, 'https://api.openai.com/v1');
+    }
+
+    getCoraWikiModel(): string {
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_MODEL, 'gpt-4o-mini');
+    }
+
+    getCoraWikiApiKeyEnvName(): string {
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_API_KEY_ENV_NAME, 'OPENAI_API_KEY');
+    }
+
+    getCoraWikiFallbackProvider(): 'openai' | 'openrouter' | 'kimi' {
+        return this.config.get<'openai' | 'openrouter' | 'kimi'>(CONFIG_KEYS.CORA_WIKI_FALLBACK_PROVIDER, 'openai');
+    }
+
+    getCoraWikiMaxSteps(): number {
+        return this.config.get<number>(CONFIG_KEYS.CORA_WIKI_MAX_STEPS, 15);
+    }
+
+    getCoraWikiInclude(): string[] {
+        return this.config.get<string[]>(CONFIG_KEYS.CORA_WIKI_INCLUDE, []);
+    }
+
+    getCoraWikiExclude(): string[] {
+        return this.config.get<string[]>(CONFIG_KEYS.CORA_WIKI_EXCLUDE, ['.git', 'node_modules', 'dist', 'build']);
+    }
+
+    getCoraWikiCacheTtlSec(): number {
+        return this.config.get<number>(CONFIG_KEYS.CORA_WIKI_CACHE_TTL_SEC, 30);
+    }
 }

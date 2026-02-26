@@ -7,7 +7,16 @@ export const CONFIG_KEYS = {
     PREVIEW_ON_CLICK: 'previewOnClick',
     AUTO_REVEAL: 'autoReveal',
     SHOW_OUTLINE_FOR_NON_MARKDOWN: 'showOutlineForNonMarkdown',
-    SORT_ORDER: 'sortOrder'
+    SORT_ORDER: 'sortOrder',
+    CORA_WIKI_PROVIDER: 'coraWiki.provider',
+    CORA_WIKI_BASE_URL: 'coraWiki.baseUrl',
+    CORA_WIKI_MODEL: 'coraWiki.model',
+    CORA_WIKI_API_KEY_ENV_NAME: 'coraWiki.apiKeyEnvName',
+    CORA_WIKI_FALLBACK_PROVIDER: 'coraWiki.fallbackProvider',
+    CORA_WIKI_MAX_STEPS: 'coraWiki.maxSteps',
+    CORA_WIKI_INCLUDE: 'coraWiki.include',
+    CORA_WIKI_EXCLUDE: 'coraWiki.exclude',
+    CORA_WIKI_CACHE_TTL_SEC: 'coraWiki.cacheTtlSec'
 } as const;
 
 export const WORKSPACE_STATE_KEYS = {

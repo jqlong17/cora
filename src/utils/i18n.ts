@@ -49,6 +49,13 @@ const zh: Messages = {
         matchCount: '匹配次数',
         matches: '{n} 处匹配',
     },
+    coraWiki: {
+        emptyHint: '点击标题栏按钮开始 CoraWiki 研究',
+        referencesTitle: '证据引用',
+        queryPrompt: '输入要研究的代码问题',
+        queryPlaceholder: '例如：订单创建后到落库的完整链路是什么？',
+        running: 'CoraWiki 正在分析代码...',
+    },
     sort: {
         title: '排序',
         placeHolder: '选择排序方式',
@@ -158,6 +165,13 @@ const en: Messages = {
         cleared: 'Search results cleared',
         matchCount: 'Match count',
         matches: '{n} match(es)',
+    },
+    coraWiki: {
+        emptyHint: 'Use the title action to start CoraWiki research',
+        referencesTitle: 'References',
+        queryPrompt: 'Enter a code architecture question',
+        queryPlaceholder: 'e.g. What is the end-to-end order creation flow?',
+        running: 'CoraWiki is analyzing code...',
     },
     sort: {
         title: 'Sort',
