@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { runCoraWikiResearch } from '../corawiki';
 import { CoraWikiProvider } from '../providers/coraWikiProvider';
+import { ConfigService } from '../services/configService';
 import { t } from '../utils/i18n';
 
-export async function startCoraWikiResearch(provider: CoraWikiProvider): Promise<void> {
+export async function startCoraWikiResearch(provider: CoraWikiProvider, configService: ConfigService): Promise<void> {
     const workspace = vscode.workspace.workspaceFolders?.[0];
     if (!workspace) {
         vscode.window.showWarningMessage(t('msg.noWorkspace'));
@@ -26,18 +27,53 @@ export async function startCoraWikiResearch(provider: CoraWikiProvider): Promise
             cancellable: false
         },
         async () => {
-            const result = await runCoraWikiResearch(query.trim(), workspace.uri.fsPath);
-            provider.setResult(result);
+            const apiKeyEnvName = configService.getCoraWikiApiKeyEnvName();
+            const apiKey = process.env[apiKeyEnvName];
+            const providerName = configService.getCoraWikiProvider();
+            const baseUrl = configService.getCoraWikiBaseUrl();
+            const model = configService.getCoraWikiModel();
+            const maxSteps = configService.getCoraWikiMaxSteps();
 
-            const output = vscode.window.createOutputChannel('CoraWiki');
-            output.clear();
-            output.appendLine(`Query: ${result.query}`);
-            output.appendLine(`Plan: ${result.plan}`);
-            for (const update of result.updates) {
-                output.appendLine(`- ${update}`);
+            if (!apiKey) {
+                vscode.window.showWarningMessage(
+                    t('coraWiki.keyMissing', { env: apiKeyEnvName })
+                );
             }
-            output.appendLine(`Final: ${result.finalConclusion}`);
-            output.show(true);
+
+            const llmConfig = apiKey
+                ? {
+                    provider: providerName,
+                    baseUrl,
+                    model,
+                    apiKey,
+                    fallbackProvider: configService.getCoraWikiFallbackProvider(),
+                    defaultHeaders: providerName === 'kimi' ? { 'User-Agent': 'KimiCLI/1.5' } : undefined
+                }
+                : undefined;
+
+            try {
+                const result = await runCoraWikiResearch(query.trim(), workspace.uri.fsPath, {
+                    maxSteps,
+                    llmConfig
+                });
+                provider.setResult(result);
+
+                const output = vscode.window.createOutputChannel('CoraWiki');
+                output.clear();
+                output.appendLine(`Provider: ${llmConfig?.provider ?? 'local'}`);
+                output.appendLine(`Model: ${llmConfig?.model ?? 'local-mode'}`);
+                output.appendLine(`Query: ${result.query}`);
+                output.appendLine(`Plan: ${result.plan}`);
+                for (const update of result.updates) {
+                    output.appendLine(`- ${update}`);
+                }
+                output.appendLine(`Final: ${result.finalConclusion}`);
+                output.show(true);
+            } catch (error) {
+                vscode.window.showErrorMessage(
+                    t('coraWiki.runFailed', { error: String(error) })
+                );
+            }
         }
     );
 }

@@ -55,6 +55,8 @@ const zh: Messages = {
         queryPrompt: '输入要研究的代码问题',
         queryPlaceholder: '例如：订单创建后到落库的完整链路是什么？',
         running: 'CoraWiki 正在分析代码...',
+        keyMissing: '未检测到环境变量 {env}，将降级为本地模式运行',
+        runFailed: 'CoraWiki 运行失败：{error}',
     },
     sort: {
         title: '排序',
@@ -172,6 +174,8 @@ const en: Messages = {
         queryPrompt: 'Enter a code architecture question',
         queryPlaceholder: 'e.g. What is the end-to-end order creation flow?',
         running: 'CoraWiki is analyzing code...',
+        keyMissing: 'Environment variable {env} not found. Running in local fallback mode.',
+        runFailed: 'CoraWiki run failed: {error}',
     },
     sort: {
         title: 'Sort',

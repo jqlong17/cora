@@ -135,7 +135,7 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
             vscode.window.showInformationMessage(t('search.cleared'));
         }),
         vscode.commands.registerCommand('knowledgeBase.startCoraWikiResearch', () => {
-            void commands.startCoraWikiResearch(c.coraWikiProvider);
+            void commands.startCoraWikiResearch(c.coraWikiProvider, c.configService);
         })
     );
 }
