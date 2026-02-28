@@ -250,8 +250,6 @@ suite('Cora E2E Test Suite', () => {
             const children = await pageTreeProvider.getChildren();
             assert.ok(Array.isArray(children), 'Favorites view should return array');
             assert.strictEqual(children.length, 0, 'Favorites view should be empty when no favorites');
-            await configService.setPageViewMode('tree');
-            pageTreeProvider.refresh();
         });
 
         test('favorites view: shows favorited file after addFavorite and refresh', async function() {
@@ -262,7 +260,6 @@ suite('Cora E2E Test Suite', () => {
             const mdPath = path.join(testWorkspacePath, '项目计划.md');
             const uri = vscode.Uri.file(mdPath);
             await favoritesService.addFavorite(uri);
-            pageTreeProvider.refresh();
             await configService.setPageViewMode('favorites');
             pageTreeProvider.refresh();
             const children = await pageTreeProvider.getChildren();
@@ -273,8 +270,6 @@ suite('Cora E2E Test Suite', () => {
             pageTreeProvider.refresh();
             const afterRemove = await pageTreeProvider.getChildren();
             assert.strictEqual(afterRemove.length, 0, 'After removeFavorite and refresh, favorites view should be empty');
-            await configService.setPageViewMode('tree');
-            pageTreeProvider.refresh();
         });
 
         test('tree view: favorited file shows file+favorite contextValue', async function() {
@@ -421,7 +416,31 @@ suite('Cora E2E Test Suite', () => {
 
         test('should get markdown extensions', () => {
             const extensions = configService.getMarkdownExtensions();
-            assert.deepStrictEqual(extensions, ['.md', '.markdown', '.mdx'], 'Should have default markdown extensions');
+            assert.deepStrictEqual(extensions, ['.md', '.markdown', '.mdx', '.mdc'], 'Should have default markdown extensions');
+        });
+
+        test('should show .mdc files in tree when filter is markdown', async function() {
+            const folders = fileService.getWorkspaceFolders();
+            if (folders.length === 0) {
+                this.skip();
+                return;
+            }
+            const rootPath = folders[0].uri.fsPath;
+            const mdcName = 'test-rules.mdc';
+            const mdcPath = path.join(rootPath, mdcName);
+            try {
+                fs.writeFileSync(mdcPath, '---\nalwaysApply: true\n---\n# Test rules\n', 'utf8');
+                await configService.setFilterMode('markdown');
+                configService.reload();
+                pageTreeProvider.refresh();
+                const children = await pageTreeProvider.getChildren();
+                const labels = children.map(c => (pageTreeProvider.getTreeItem(c) as vscode.TreeItem).label);
+                assert.ok(labels.includes(mdcName), `Tree should contain ${mdcName} when filter is markdown`);
+            } finally {
+                if (fs.existsSync(mdcPath)) {
+                    fs.unlinkSync(mdcPath);
+                }
+            }
         });
     });
 
@@ -566,15 +585,17 @@ suite('Cora E2E Test Suite', () => {
         });
 
         test('should update outline in real-time when editing in text editor', async function() {
+            this.timeout(7000);
             const testFile = path.join(testWorkspacePath, 'outline-realtime-test.md');
             const initialContent = '# 项目计划\n\n## 时间安排\n\n### 标题\n\n';
             await fs.promises.writeFile(testFile, initialContent, 'utf8');
 
-            const document = await vscode.workspace.openTextDocument(testFile);
-            const editor = await vscode.window.showTextDocument(document);
+            const uri = vscode.Uri.file(testFile);
+            const document = await vscode.workspace.openTextDocument(uri);
+            let editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: false });
 
-            outlineProvider.updateForEditor(editor);
-            await new Promise(resolve => setTimeout(resolve, 400));
+            // 初始状态用 updateForUri 建立稳定基线，避免受 active editor 切换与防抖影响
+            await outlineProvider.updateForUri(uri);
 
             const getAllHeadingTexts = async (): Promise<string[]> => {
                 const texts: string[] = [];
@@ -589,19 +610,33 @@ suite('Cora E2E Test Suite', () => {
                 return texts;
             };
 
-            let texts = await getAllHeadingTexts();
+            const waitForHeading = async (headingText: string, shouldExist: boolean, timeoutMs = 3000): Promise<string[]> => {
+                const start = Date.now();
+                let latest: string[] = [];
+                while (Date.now() - start < timeoutMs) {
+                    latest = await getAllHeadingTexts();
+                    const exists = latest.includes(headingText);
+                    if (exists === shouldExist) {
+                        return latest;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 80));
+                }
+                return latest;
+            };
+
+            let texts = await waitForHeading('标题', true);
             assert.ok(texts.includes('标题'), 'Initial outline should contain 标题');
             assert.ok(!texts.includes('标题2222'), 'Initial outline should not yet contain 标题2222');
 
+            // 重新确保 editor 句柄有效，避免测试环境中 active editor 切换导致的非法句柄
+            editor = await vscode.window.showTextDocument(document, { preview: false, preserveFocus: false });
             await editor.edit(editBuilder => {
                 const end = document.lineAt(document.lineCount - 1).range.end;
                 editBuilder.insert(end, '\n### 标题2222\n');
             });
 
             outlineProvider.updateForEditor(editor);
-            await new Promise(resolve => setTimeout(resolve, 400));
-
-            texts = await getAllHeadingTexts();
+            texts = await waitForHeading('标题2222', true);
             assert.ok(texts.includes('标题2222'), 'Outline should update in real-time and include 标题2222 after edit');
 
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
@@ -753,6 +788,63 @@ suite('Cora E2E Test Suite', () => {
             assert.ok(activeEditor, 'After openEditor should have active text editor');
             assert.ok(activeEditor.document.uri.fsPath === testFile || activeEditor.document.fileName === testFile,
                 'Active editor should show the same file');
+
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        });
+
+        test('should open .mdc file with Cora preview', async function() {
+            const mdcName = 'e2e-preview-test.mdc';
+            const mdcPath = path.join(testWorkspacePath, mdcName);
+            try {
+                fs.writeFileSync(mdcPath, '---\ndescription: E2E test\n---\n# MDC Preview Test\n', 'utf8');
+                const uri = vscode.Uri.file(mdcPath);
+                await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+                await new Promise(resolve => setTimeout(resolve, 800));
+
+                const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+                assert.ok(tab, 'Should have active tab after openPreview');
+                assert.ok(tab.label.includes(mdcName) || (tab.input as { uri?: vscode.Uri })?.uri?.fsPath?.endsWith('.mdc'),
+                    'Tab should show .mdc file');
+                const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === mdcPath || d.fileName.endsWith(mdcName));
+                assert.ok(doc, 'Document for .mdc file should be open or loaded');
+                assert.ok(doc.fileName.endsWith('.mdc'), 'Opened document should be .mdc');
+
+                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            } finally {
+                if (fs.existsSync(mdcPath)) {
+                    fs.unlinkSync(mdcPath);
+                }
+            }
+        });
+
+        test('should keep Cora preview and support gotoHeading in Marked mode', async function() {
+            const testFile = path.join(testWorkspacePath, '项目计划.md');
+            const uri = vscode.Uri.file(testFile);
+            const document = await vscode.workspace.openTextDocument(uri);
+            const content = document.getText();
+            assert.ok(content.includes('<table>'), 'Test doc should contain HTML and use Marked mode');
+
+            await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            const tabBefore = vscode.window.tabGroups.activeTabGroup.activeTab;
+            assert.ok(tabBefore, 'Should have active preview tab in Marked mode');
+            assert.ok(tabBefore.label.includes('项目计划'), 'Preview tab should match target file');
+
+            const headings = await outlineService.getHeadings(document);
+            const target1 = headings.find(h => h.text === '需求分析');
+            const target2 = headings.find(h => h.text === '技术方案');
+            assert.ok(target1, 'Should have 需求分析 heading');
+            assert.ok(target2, 'Should have 技术方案 heading');
+
+            await vscode.commands.executeCommand('knowledgeBase.gotoHeading', target1!.line, uri.toString());
+            await new Promise(resolve => setTimeout(resolve, 400));
+            await vscode.commands.executeCommand('knowledgeBase.gotoHeading', target2!.line, uri.toString());
+            await new Promise(resolve => setTimeout(resolve, 400));
+
+            const tabAfter = vscode.window.tabGroups.activeTabGroup.activeTab;
+            assert.ok(tabAfter, 'After gotoHeading should still have an active tab');
+            assert.ok(tabAfter.label.includes('项目计划'), 'After gotoHeading should stay on same preview file');
 
             await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
         });
@@ -949,6 +1041,31 @@ suite('Cora E2E Test Suite', () => {
             const autoReveal = configService.getAutoReveal();
             assert.ok(typeof autoReveal === 'boolean', 'autoReveal should be boolean');
         });
+
+        test('CoraWiki provider change applies preset for baseUrl/model/apiKeyEnvName', async function() {
+            const config = vscode.workspace.getConfiguration('knowledgeBase');
+            const originalProvider = config.get<string>('coraWiki.provider');
+            try {
+                await config.update('coraWiki.provider', 'kimi', true);
+                await new Promise(resolve => setTimeout(resolve, 300));
+                configService.reload();
+                assert.strictEqual(
+                    configService.getCoraWikiBaseUrl(),
+                    'https://api.moonshot.ai/v1',
+                    'baseUrl should be kimi preset after provider change'
+                );
+                assert.strictEqual(
+                    configService.getCoraWikiApiKeyEnvName(),
+                    'KIMI_API_KEY',
+                    'apiKeyEnvName should be kimi preset'
+                );
+            } finally {
+                if (originalProvider !== undefined) {
+                    await config.update('coraWiki.provider', originalProvider, true);
+                    await configService.applyCoraWikiProviderPreset();
+                }
+            }
+        });
     });
 
     suite('Utility Functions', () => {
@@ -973,12 +1090,14 @@ suite('Cora E2E Test Suite', () => {
 
         test('should identify markdown files', async () => {
             const { isMarkdownFile } = await import('../../utils/markdownParser');
+            const defaultExtensions = ['.md', '.markdown', '.mdx', '.mdc'];
 
-            assert.ok(isMarkdownFile('test.md', ['.md', '.markdown', '.mdx']), 'Should identify .md files');
-            assert.ok(isMarkdownFile('test.markdown', ['.md', '.markdown', '.mdx']), 'Should identify .markdown files');
-            assert.ok(isMarkdownFile('test.mdx', ['.md', '.markdown', '.mdx']), 'Should identify .mdx files');
-            assert.ok(!isMarkdownFile('test.txt', ['.md', '.markdown', '.mdx']), 'Should not identify .txt files');
-            assert.ok(!isMarkdownFile('test.js', ['.md', '.markdown', '.mdx']), 'Should not identify .js files');
+            assert.ok(isMarkdownFile('test.md', defaultExtensions), 'Should identify .md files');
+            assert.ok(isMarkdownFile('test.markdown', defaultExtensions), 'Should identify .markdown files');
+            assert.ok(isMarkdownFile('test.mdx', defaultExtensions), 'Should identify .mdx files');
+            assert.ok(isMarkdownFile('test.mdc', defaultExtensions), 'Should identify .mdc files');
+            assert.ok(!isMarkdownFile('test.txt', defaultExtensions), 'Should not identify .txt files');
+            assert.ok(!isMarkdownFile('test.js', defaultExtensions), 'Should not identify .js files');
         });
 
         test('should sanitize file names', async () => {

@@ -1,6 +1,34 @@
 import * as vscode from 'vscode';
 import { FilterMode, PageViewMode, SortOrder, CONFIG_KEYS, DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
 
+export type CoraWikiProviderId = 'kimi' | 'openai' | 'openrouter' | 'minimax';
+
+export const CORA_WIKI_PROVIDER_PRESETS: Record<
+    CoraWikiProviderId,
+    { baseUrl: string; model: string; apiKeyEnvName: string }
+> = {
+    openai: {
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        apiKeyEnvName: 'OPENAI_API_KEY'
+    },
+    kimi: {
+        baseUrl: 'https://api.moonshot.ai/v1',
+        model: 'moonshot-v1-8k',
+        apiKeyEnvName: 'KIMI_API_KEY'
+    },
+    openrouter: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'openai/gpt-4o-mini',
+        apiKeyEnvName: 'OPENROUTER_API_KEY'
+    },
+    minimax: {
+        baseUrl: 'https://api.minimaxi.com/anthropic',
+        model: 'MiniMax-M2.5',
+        apiKeyEnvName: 'MINIMAX_API_KEY'
+    }
+};
+
 export class ConfigService {
     private config: vscode.WorkspaceConfiguration;
 
@@ -14,6 +42,10 @@ export class ConfigService {
 
     getFilterMode(): FilterMode {
         return this.config.get<FilterMode>(CONFIG_KEYS.FILTER_MODE, 'markdown');
+    }
+
+    getShowHiddenFiles(): boolean {
+        return this.config.get<boolean>(CONFIG_KEYS.SHOW_HIDDEN_FILES, false);
     }
 
     async setFilterMode(mode: FilterMode): Promise<void> {
@@ -52,28 +84,49 @@ export class ConfigService {
         await this.config.update(CONFIG_KEYS.SORT_ORDER, order, true);
     }
 
-    getCoraWikiProvider(): 'kimi' | 'openai' | 'openrouter' {
-        return this.config.get<'kimi' | 'openai' | 'openrouter'>(CONFIG_KEYS.CORA_WIKI_PROVIDER, 'openai');
+    getCoraWikiProvider(): 'kimi' | 'openai' | 'openrouter' | 'minimax' {
+        return this.config.get<'kimi' | 'openai' | 'openrouter' | 'minimax'>(CONFIG_KEYS.CORA_WIKI_PROVIDER, 'openai');
     }
 
     getCoraWikiBaseUrl(): string {
-        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_BASE_URL, 'https://api.openai.com/v1');
+        const provider = this.getCoraWikiProvider();
+        const preset = CORA_WIKI_PROVIDER_PRESETS[provider];
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_BASE_URL, preset.baseUrl);
     }
 
     getCoraWikiModel(): string {
-        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_MODEL, 'gpt-4o-mini');
+        const provider = this.getCoraWikiProvider();
+        const preset = CORA_WIKI_PROVIDER_PRESETS[provider];
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_MODEL, preset.model);
     }
 
     getCoraWikiApiKeyEnvName(): string {
-        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_API_KEY_ENV_NAME, 'OPENAI_API_KEY');
+        const provider = this.getCoraWikiProvider();
+        const preset = CORA_WIKI_PROVIDER_PRESETS[provider];
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_API_KEY_ENV_NAME, preset.apiKeyEnvName);
     }
 
-    getCoraWikiFallbackProvider(): 'openai' | 'openrouter' | 'kimi' {
-        return this.config.get<'openai' | 'openrouter' | 'kimi'>(CONFIG_KEYS.CORA_WIKI_FALLBACK_PROVIDER, 'openai');
+    /** 根据当前选择的提供商，将 baseUrl / model / apiKeyEnvName 写回为该提供商的预设值。在用户切换 provider 时调用。 */
+    async applyCoraWikiProviderPreset(): Promise<void> {
+        const provider = this.getCoraWikiProvider();
+        const preset = CORA_WIKI_PROVIDER_PRESETS[provider];
+        const config = vscode.workspace.getConfiguration('knowledgeBase');
+        await config.update(CONFIG_KEYS.CORA_WIKI_BASE_URL, preset.baseUrl, true);
+        await config.update(CONFIG_KEYS.CORA_WIKI_MODEL, preset.model, true);
+        await config.update(CONFIG_KEYS.CORA_WIKI_API_KEY_ENV_NAME, preset.apiKeyEnvName, true);
+        this.reload();
+    }
+
+    getCoraWikiFallbackProvider(): 'openai' | 'openrouter' | 'kimi' | 'minimax' {
+        return this.config.get<'openai' | 'openrouter' | 'kimi' | 'minimax'>(CONFIG_KEYS.CORA_WIKI_FALLBACK_PROVIDER, 'openai');
     }
 
     getCoraWikiMaxSteps(): number {
         return this.config.get<number>(CONFIG_KEYS.CORA_WIKI_MAX_STEPS, 15);
+    }
+
+    getCoraWikiMaxTotalTokens(): number {
+        return this.config.get<number>(CONFIG_KEYS.CORA_WIKI_MAX_TOTAL_TOKENS, 100000);
     }
 
     getCoraWikiInclude(): string[] {
@@ -86,5 +139,13 @@ export class ConfigService {
 
     getCoraWikiCacheTtlSec(): number {
         return this.config.get<number>(CONFIG_KEYS.CORA_WIKI_CACHE_TTL_SEC, 30);
+    }
+
+    getCoraWikiPythonToolingEnabled(): boolean {
+        return this.config.get<boolean>(CONFIG_KEYS.CORA_WIKI_PYTHON_TOOLING_ENABLED, true);
+    }
+
+    getCoraWikiPythonPath(): string {
+        return this.config.get<string>(CONFIG_KEYS.CORA_WIKI_PYTHON_PATH, 'python3');
     }
 }

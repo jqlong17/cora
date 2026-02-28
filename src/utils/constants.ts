@@ -2,6 +2,7 @@ export const EXTENSION_NAME = 'knowledgeBase';
 
 export const CONFIG_KEYS = {
     FILTER_MODE: 'filterMode',
+    SHOW_HIDDEN_FILES: 'showHiddenFiles',
     PAGE_VIEW_MODE: 'pageViewMode',
     MARKDOWN_EXTENSIONS: 'markdownExtensions',
     PREVIEW_ON_CLICK: 'previewOnClick',
@@ -14,9 +15,12 @@ export const CONFIG_KEYS = {
     CORA_WIKI_API_KEY_ENV_NAME: 'coraWiki.apiKeyEnvName',
     CORA_WIKI_FALLBACK_PROVIDER: 'coraWiki.fallbackProvider',
     CORA_WIKI_MAX_STEPS: 'coraWiki.maxSteps',
+    CORA_WIKI_MAX_TOTAL_TOKENS: 'coraWiki.maxTotalTokens',
     CORA_WIKI_INCLUDE: 'coraWiki.include',
     CORA_WIKI_EXCLUDE: 'coraWiki.exclude',
-    CORA_WIKI_CACHE_TTL_SEC: 'coraWiki.cacheTtlSec'
+    CORA_WIKI_CACHE_TTL_SEC: 'coraWiki.cacheTtlSec',
+    CORA_WIKI_PYTHON_TOOLING_ENABLED: 'coraWiki.pythonTooling.enabled',
+    CORA_WIKI_PYTHON_PATH: 'coraWiki.pythonPath'
 } as const;
 
 export const WORKSPACE_STATE_KEYS = {
@@ -45,16 +49,20 @@ export const COMMANDS = {
 
 export const VIEWS = {
     PAGE_TREE: 'pageTree',
-    OUTLINE: 'outline',
+    OUTLINE: 'kbOutline',
     DATABASE: 'database'
 } as const;
 
-export const DEFAULT_MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx'];
+/** 页面树树状/平铺当前状态，用于 view/title 切换按钮显示 list-tree 或 list-flat 图标 */
+export const CONTEXT_PAGE_TREE_VIEW_LAYOUT = 'coraPageTreeViewLayout';
+
+export const DEFAULT_MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc'];
 
 export const HEADING_REGEX = /^(#{1,6})\s+(.+)$/gm;
 
 export type FilterMode = 'all' | 'markdown';
 
+/** 展示形式：树形、平铺或仅收藏。 */
 export type PageViewMode = 'flat' | 'tree' | 'favorites';
 
 export type SortOrder =

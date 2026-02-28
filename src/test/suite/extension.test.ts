@@ -42,14 +42,16 @@ Even more text
     });
 
     test('isMarkdownFile should identify markdown files correctly', () => {
-        const extensions = ['.md', '.markdown', '.mdx'];
+        const extensions = ['.md', '.markdown', '.mdx', '.mdc'];
 
         assert.strictEqual(isMarkdownFile('test.md', extensions), true);
         assert.strictEqual(isMarkdownFile('test.markdown', extensions), true);
         assert.strictEqual(isMarkdownFile('test.mdx', extensions), true);
+        assert.strictEqual(isMarkdownFile('test.mdc', extensions), true);
         assert.strictEqual(isMarkdownFile('test.txt', extensions), false);
         assert.strictEqual(isMarkdownFile('test.js', extensions), false);
         assert.strictEqual(isMarkdownFile('test', extensions), false);
+        assert.strictEqual(isMarkdownFile('x.mdc', ['.md']), false, 'Only .md should not match .mdc');
     });
 
     test('isMarkdownFile should be case insensitive', () => {
@@ -61,6 +63,7 @@ Even more text
 
     test('getFileIcon should return correct icons', () => {
         assert.ok(getFileIcon('test.md').includes('markdown'));
+        assert.ok(getFileIcon('test.mdc').includes('markdown'));
         assert.ok(getFileIcon('test.txt').includes('file-text'));
         assert.ok(getFileIcon('test.json').includes('json'));
         assert.ok(getFileIcon('test.js').includes('file-code'));

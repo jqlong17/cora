@@ -62,7 +62,6 @@ export async function newNote(
     if (newUri) {
         pageTreeProvider.refresh();
         await openPreview(previewProvider, newUri);
-        vscode.window.showInformationMessage(`${t('newNote.created')}: ${sanitizedName}`);
     } else {
         vscode.window.showErrorMessage(t('newNote.createFailed'));
     }
@@ -118,22 +117,50 @@ export async function newFolder(
 
     if (newUri) {
         pageTreeProvider.refresh();
-        vscode.window.showInformationMessage(`${t('newFolder.created')}: ${sanitizedName}`);
     } else {
         vscode.window.showErrorMessage(t('newFolder.createFailed'));
     }
 }
 
+function getSelectedItemsForDelete(
+    item: { item: FileItem } | undefined,
+    pageTreeView: vscode.TreeView<PageTreeItem> | undefined
+): FileItem[] {
+    const selected = pageTreeView?.selection?.length
+        ? pageTreeView.selection
+        : item?.item ? [{ item: item.item } as PageTreeItem] : [];
+    const items: FileItem[] = [];
+    for (const node of selected) {
+        const fi = node?.item;
+        if (fi) {
+            items.push(fi);
+        }
+    }
+    return items;
+}
+
 export async function deleteItem(
-    item: { item: FileItem },
+    item: { item: FileItem } | undefined,
     fileService: FileService,
-    pageTreeProvider: PageTreeProvider
+    pageTreeProvider: PageTreeProvider,
+    pageTreeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
-    const itemName = item.item.name;
-    const itemType = item.item.type === 'directory' ? t('fileOp.folder') : t('fileOp.file');
+    const toDelete = getSelectedItemsForDelete(item, pageTreeView);
+    if (toDelete.length === 0) {
+        return;
+    }
+
+    const n = toDelete.length;
+    const confirmMsg = n > 1
+        ? t('fileOp.deleteConfirmMulti', { n })
+        : (() => {
+            const single = toDelete[0];
+            const itemType = single.type === 'directory' ? t('fileOp.folder') : t('fileOp.file');
+            return t('fileOp.deleteConfirm', { type: itemType, name: single.name });
+        })();
 
     const result = await vscode.window.showWarningMessage(
-        t('fileOp.deleteConfirm', { type: itemType, name: itemName }),
+        confirmMsg,
         { modal: true },
         t('fileOp.delete')
     );
@@ -142,13 +169,23 @@ export async function deleteItem(
         return;
     }
 
-    const success = await fileService.deleteItem(item.item.uri);
+    let successCount = 0;
+    for (const fileItem of toDelete) {
+        const ok = await fileService.deleteItem(fileItem.uri);
+        if (ok) {
+            successCount += 1;
+        }
+    }
 
-    if (success) {
-        pageTreeProvider.refresh();
-        vscode.window.showInformationMessage(`${t('fileOp.deleted', { type: itemType })}: ${itemName}`);
+    pageTreeProvider.refresh();
+    if (successCount === n) {
+        vscode.window.showInformationMessage(
+            n > 1 ? t('fileOp.deletedMulti', { n }) : `${t('fileOp.deleted', { type: toDelete[0].type === 'directory' ? t('fileOp.folder') : t('fileOp.file') })}: ${toDelete[0].name}`
+        );
+    } else if (successCount > 0) {
+        vscode.window.showWarningMessage(t('fileOp.deletedMulti', { n: successCount }));
     } else {
-        vscode.window.showErrorMessage(t('fileOp.deleteFailed', { type: itemType }));
+        vscode.window.showErrorMessage(t('fileOp.deleteFailedMulti'));
     }
 }
 

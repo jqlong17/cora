@@ -25,7 +25,8 @@ export class FileService {
         return vscode.workspace.workspaceFolders || [];
     }
 
-    async getChildren(item?: FileItem): Promise<FileItem[]> {
+    /** 当 filterMarkdownOnly 为 true 时仅返回 Markdown 文件；为 undefined 时使用 config filterMode（兼容旧逻辑）。 */
+    async getChildren(item?: FileItem, options?: { filterMarkdownOnly?: boolean }): Promise<FileItem[]> {
         let targetUri: vscode.Uri;
 
         if (item) {
@@ -50,16 +51,19 @@ export class FileService {
         try {
             const entries = await fs.promises.readdir(targetUri.fsPath, { withFileTypes: true });
             const sortOrder = this.configService.getSortOrder();
-            const filterMode = this.configService.getFilterMode();
+            const filterMode = options?.filterMarkdownOnly !== undefined
+                ? (options.filterMarkdownOnly ? 'markdown' : 'all')
+                : this.configService.getFilterMode();
+            const showHiddenFiles = this.configService.getShowHiddenFiles();
             const markdownExtensions = this.configService.getMarkdownExtensions();
 
             type EntryInfo = { entry: fs.Dirent; entryPath: string; entryUri: vscode.Uri; isDir: boolean };
             const toStat: EntryInfo[] = [];
             for (const entry of entries) {
-                if (entry.name.startsWith('.')) {
+                if (entry.isDirectory() && entry.name === '.git') {
                     continue;
                 }
-                if (entry.isDirectory() && entry.name === '.git') {
+                if (!showHiddenFiles && entry.name.startsWith('.')) {
                     continue;
                 }
                 const entryPath = path.join(targetUri.fsPath, entry.name);
@@ -113,17 +117,20 @@ export class FileService {
     }
 
     /**
-     * 递归收集所有文件（按 filterMode 筛选：仅 MD 或全部），按配置排序。用于平铺视图。
+     * 递归收集所有文件（按 filterMarkdownOnly 或 config filterMode 筛选），按配置排序。用于平铺视图。
      * 结果带短期缓存（key = workspace + sortOrder + filterMode，TTL 30s），刷新/配置/文件变更时需 clearFlatListCache()。
      */
-    async getAllFilesSortedByConfig(): Promise<FileItem[]> {
+    async getAllFilesSortedByConfig(options?: { filterMarkdownOnly?: boolean }): Promise<FileItem[]> {
         const folders = this.getWorkspaceFolders();
         if (folders.length === 0) {
             return [];
         }
-        const filterMode = this.configService.getFilterMode();
+        const filterMode = options?.filterMarkdownOnly !== undefined
+            ? (options.filterMarkdownOnly ? 'markdown' : 'all')
+            : this.configService.getFilterMode();
         const sortOrder = this.configService.getSortOrder();
-        const key = folders.map(f => f.uri.toString()).sort().join('\0') + '\0' + sortOrder + '\0' + filterMode;
+        const showHiddenFiles = this.configService.getShowHiddenFiles();
+        const key = folders.map(f => f.uri.toString()).sort().join('\0') + '\0' + sortOrder + '\0' + filterMode + '\0' + String(showHiddenFiles);
         const now = Date.now();
         if (this.flatListCache !== null && this.flatListCache.key === key && (now - this.flatListCache.timestamp) < FLAT_LIST_CACHE_TTL_MS) {
             return this.flatListCache.result.map(item => ({ ...item }));
@@ -137,16 +144,16 @@ export class FileService {
                 const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
                 for (const entry of entries) {
                     const fullPath = path.join(dirPath, entry.name);
-                    if (entry.name.startsWith('.')) {
-                        continue;
-                    }
                     if (entry.name === 'node_modules' || entry.name === 'out' || entry.name === 'dist') {
                         continue;
                     }
+                    if (entry.isDirectory() && entry.name === '.git') {
+                        continue;
+                    }
+                    if (!showHiddenFiles && entry.name.startsWith('.')) {
+                        continue;
+                    }
                     if (entry.isDirectory()) {
-                        if (entry.name === '.git') {
-                            continue;
-                        }
                         await collectFromDir(fullPath);
                     } else if (entry.isFile()) {
                         if (filterMode === 'markdown' && !isMarkdownFile(entry.name, markdownExtensions)) {

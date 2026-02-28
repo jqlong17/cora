@@ -31,6 +31,7 @@ export function getFileIcon(fileName: string): string {
         case 'md':
         case 'markdown':
         case 'mdx':
+        case 'mdc':
             return '$(markdown)';
         case 'txt':
             return '$(file-text)';

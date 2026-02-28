@@ -1,6 +1,20 @@
 # Changelog
 
+## \[0.2.0] - 2026-02-27
+
+### Release notes
+
+* **Version bump to 0.2.0**: CoraWiki and Plan enhancement are now labeled as **experimental features** in the README; we will iterate based on feedback and may promote them to stable later.
+
+### Documentation
+
+* **Experimental feature labels**: README (CN/EN) now marks CoraWiki and Plan writing constraints as experimental; table, product feature sections, and Roadmap updated accordingly.
+
 ## \[0.1.11] - 2026-02-26
+
+### Documentation
+
+* **Product positioning update**: Cora is now described as a “read, find, understand, plan” companion for Cursor / AI-assisted coding. README and extension description updated with Cora and AI-assisted coding, CoraWiki, and Plan writing constraints; closing slogan and Roadmap aligned.
 
 ### Added
 

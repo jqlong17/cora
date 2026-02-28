@@ -1,6 +1,6 @@
 # Cora
 
-A Notion-inspired knowledge management extension for VS Code
+A Notion-inspired knowledge management extension for VS Code and Cursor, and a companion for AI-assisted coding: it improves how you read, find, understand, and plan—with project-level code understanding (CoraWiki, experimental) and structured plan writing (Plan enhancement, experimental, optional).
 
 ## Why Cora?
 
@@ -8,7 +8,7 @@ VS Code and Cursor are built for programming—file tree on the left, editor in 
 
 Notion excels at knowledge management: hierarchical pages, document outlines, full-text search. But it lacks VS Code’s editing power and AI integration.
 
-Cora brings both together:
+Cora brings both together. When used in Cursor, Cora also helps the AI understand your project and write actionable plans.
 
 * 📁 **Page Tree** — Hierarchical knowledge organization as intuitive as Notion
 
@@ -21,6 +21,8 @@ Cora brings both together:
 ## Who is it for?
 
 * **Developers who are also knowledge workers** — One tool for code and notes
+
+* **Developers using Cursor for AI-assisted coding** — Better doc reading, project understanding, and plan discipline
 
 * **Non-technical knowledge workers** — Use AI-assisted workflows to manage knowledge more efficiently
 
@@ -42,6 +44,17 @@ Keep VS Code’s editing, add Notion-style organization.
 * Center stays the VS Code editor, with one-click preview/edit
 
 * Right-hand AI chat is unchanged and works with the knowledge base
+
+## Cora and AI-assisted coding
+
+Cora gives Cursor / AI-assisted coding four capabilities so you and the AI work better in one workspace:
+
+| Capability | In Cora | Value for AI programming / Cursor |
+|------------|---------|-----------------------------------|
+| **Read** | Page tree, Outline | Better MD/Plan reading and navigation; clear structure when the AI references docs. |
+| **Find** | Full-text search | Quick file and snippet lookup; groundwork for “find by description” for the AI. |
+| **Understand** | CoraWiki (experimental) | Repo-wide code understanding and architecture reports; future MCP for deeper context. |
+| **Plan** | Plan writing constraints (experimental, optional) | Structured, checkable plans; AI reads constraints first for more consistent output. |
 
 ## Product features
 
@@ -109,7 +122,19 @@ The **Search** panel supports **multiple keywords** (space-separated). Press Ent
 
 * **Match info**: Result list shows match count and a short preview for quick scanning
 
-### 7. Favorites
+### 7. CoraWiki: workspace architecture analysis (experimental)
+
+**CoraWiki** is an experimental feature. The panel runs **architecture analysis** on the current workspace and produces a structured report (overview, module roles, key flows, risks, references). In Cursor, the report gives the AI project-level context; we plan to expose deeper context via MCP so AI coding gets more support.
+
+* **One-click analysis**: In the Cora panel, choose “Start architecture analysis for current workspace”, then open the report when done
+
+* **Report and references**: Click file references in the report to jump to code for you or the AI
+
+### 8. Plan writing constraints (experimental, optional)
+
+**Plan enhancement** is an experimental feature. Cora provides **Plan writing constraints and templates** so you and the AI can write clear, checkable plans. In Cursor you can combine them with workspace rules so that “read constraints before writing a plan” is automatic, and AI-generated plans are more consistent and actionable. Later versions may add commands like “Open plan constraints” or “New plan from template”.
+
+### 9. Favorites
 
 **Favorite** frequently used documents from the page tree; the toolbar has a **Favorites** view. In tree or flat view, hover or right-click to add/remove favorites; favorited items show a star.
 
@@ -119,7 +144,7 @@ The **Search** panel supports **multiple keywords** (space-separated). Press Ent
 
 * **Star on items**: Favorited MD/HTML files show a star in the list; you can unfavorite anytime
 
-### 8. Mermaid in preview
+### 10. Mermaid in preview
 
 In preview mode, **Mermaid** code blocks in Markdown are rendered as sequence diagrams, flowcharts, etc.—no need to export images.
 
@@ -129,7 +154,7 @@ In preview mode, **Mermaid** code blocks in Markdown are rendered as sequence di
 
 * **One-click switch**: Toggle between Preview and Markdown to compare code and diagram
 
-### 9. Typography
+### 11. Typography
 
 Preview and editor both support configurable **fonts** with clear mixed Latin/CJK. You can choose Cascadia Mono, Google Sans, IBM Plex Mono, Noto Sans SC, etc. in settings.
 
@@ -242,15 +267,23 @@ In VS Code settings, search for “knowledgeBase”:
 
 Planned work, in rough priority order.
 
+### Current / ongoing (including experimental)
+
+* **CoraWiki** (experimental): Workspace architecture analysis is available; we keep improving report quality and multi-step research.
+
+* **Plan enhancement** (experimental): Plan writing constraints and templates as a product capability; we may add an “Open plan constraints” command or “New plan from template” later.
+
 ### Basic
 
 * **MD normalization**: One-click cleanup of Markdown (e.g. spacing around bold/italic, table alignment, Mermaid syntax) for LLM-generated content.  
 
-### AI
+### AI and integration
+
+* **MCP**: Expose project understanding, plan constraints, etc. to Cursor so AI coding gets deeper context.
 
 * **Skill generation**: Use AI to analyze a repo or selected code and produce reproducible Skill docs.  
 
-* **Architecture diagrams**: Use AI to summarize repo structure and output diagrams (e.g. Mermaid).  
+* **Architecture diagrams**: Together with CoraWiki, use AI to summarize repo structure and output diagrams (e.g. Mermaid).  
 
 ## Languages / Changelog
 
@@ -262,4 +295,4 @@ Planned work, in rough priority order.
 
 MIT  
 
-Cora — Make knowledge management as efficient as coding.
+Cora — Knowledge management and AI-assisted coding in one workspace; read, find, understand, and plan better in Cursor.

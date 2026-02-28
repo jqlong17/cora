@@ -4,10 +4,34 @@ import { FileItem } from '../services/fileService';
 import type { PageTreeItem } from '../providers/pageTreeProvider';
 import { t } from '../utils/i18n';
 
+type ContextTarget = { item?: FileItem; reportPath?: string };
+
+function toFileItem(target: ContextTarget | undefined): FileItem | undefined {
+    if (!target) {
+        return undefined;
+    }
+    if (target.item) {
+        return target.item;
+    }
+    if (typeof target.reportPath === 'string' && target.reportPath.length > 0) {
+        return {
+            uri: vscode.Uri.file(target.reportPath),
+            type: 'file',
+            name: path.basename(target.reportPath)
+        };
+    }
+    return undefined;
+}
+
 function getSelectedFileItems(
-    item: { item: FileItem } | undefined,
+    item: ContextTarget | undefined,
     pageTreeView: vscode.TreeView<PageTreeItem> | undefined
 ): FileItem[] {
+    const singleTarget = toFileItem(item);
+    if (singleTarget && !item?.item) {
+        return [singleTarget];
+    }
+
     const selected = pageTreeView?.selection?.length
         ? pageTreeView.selection
         : item?.item ? [{ item: item.item } as PageTreeItem] : [];
@@ -21,20 +45,21 @@ function getSelectedFileItems(
     return fileItems;
 }
 
-export async function revealInFinder(item: { item: FileItem }): Promise<void> {
-    if (!item || !item.item) {
+export async function revealInFinder(item: ContextTarget | undefined): Promise<void> {
+    const target = toFileItem(item);
+    if (!target) {
         return;
     }
 
     try {
-        await vscode.commands.executeCommand('revealFileInOS', item.item.uri);
+        await vscode.commands.executeCommand('revealFileInOS', target.uri);
     } catch (error) {
         vscode.window.showErrorMessage(`${t('msg.revealFailed')}: ${error}`);
     }
 }
 
 export async function copyPath(
-    item: { item: FileItem } | undefined,
+    item: ContextTarget | undefined,
     pageTreeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
     const fileItems = getSelectedFileItems(item, pageTreeView);
@@ -45,16 +70,13 @@ export async function copyPath(
     try {
         const text = fileItems.map((fi) => fi.uri.fsPath).join('\n');
         await vscode.env.clipboard.writeText(text);
-        vscode.window.showInformationMessage(
-            fileItems.length > 1 ? t('msg.copiedAbsolutePathMulti', { n: fileItems.length }) : t('msg.copiedAbsolutePath')
-        );
     } catch (error) {
         vscode.window.showErrorMessage(`${t('msg.copyPathFailed')}: ${error}`);
     }
 }
 
 export async function copyRelativePath(
-    item: { item: FileItem } | undefined,
+    item: ContextTarget | undefined,
     pageTreeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
     const fileItems = getSelectedFileItems(item, pageTreeView);
@@ -73,9 +95,6 @@ export async function copyRelativePath(
             }
         }
         await vscode.env.clipboard.writeText(lines.join('\n'));
-        vscode.window.showInformationMessage(
-            fileItems.length > 1 ? t('msg.copiedRelativePathMulti', { n: fileItems.length }) : t('msg.copiedRelativePath')
-        );
     } catch (error) {
         vscode.window.showErrorMessage(`${t('msg.copyRelativePathFailed')}: ${error}`);
     }
@@ -108,8 +127,6 @@ export async function copyFile(item: { item: FileItem }, fileService: any): Prom
 
         // 创建新文件
         await fs.writeFile(targetUri.fsPath, content);
-
-        vscode.window.showInformationMessage(t('msg.copiedFile', { name: newName }));
     } catch (error) {
         vscode.window.showErrorMessage(`${t('msg.copyFileFailed')}: ${error}`);
     }

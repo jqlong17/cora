@@ -8,9 +8,11 @@ export async function togglePageView(
     pageTreeProvider: PageTreeProvider
 ): Promise<void> {
     const currentMode = configService.getPageViewMode();
+    // 仅在树状/平铺间切换；当前为收藏时点击无效，避免误切到「全部文件」
+    if (currentMode === 'favorites') {
+        return;
+    }
     const newMode: PageViewMode = currentMode === 'flat' ? 'tree' : 'flat';
     await configService.setPageViewMode(newMode);
     pageTreeProvider.refresh();
-    const message = newMode === 'flat' ? '已切换为平铺视图' : '已切换为树形视图';
-    vscode.window.showInformationMessage(message);
 }

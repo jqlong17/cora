@@ -9,3 +9,5 @@ export * from './treeViewCommands';
 export * from './contextMenuCommands';
 export * from './sortCommands';
 export * from './coraWikiCommands';
+export * from './coraPlanCommands';
+export * from './coraPlanCommands';

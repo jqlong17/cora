@@ -31,14 +31,48 @@ export interface ResearchResult {
     updates: string[];
     finalConclusion: string;
     references: string[];
+    debugLogPath?: string;
+    tokenUsage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        cachedTokens: number;
+    };
+    diagrams?: string[];
+    moduleSummaries?: string[];
+    architectureFindings?: Array<{
+        title: string;
+        judgement: string;
+        evidence: string[];
+    }>;
+    criticalFlows?: Array<{
+        name: string;
+        steps: string[];
+        evidence: string[];
+    }>;
+    risks?: Array<{
+        risk: string;
+        impact: string;
+        evidence: string[];
+    }>;
+    unknowns?: string[];
+    promptVersion?: string;
+    referenceStats?: {
+        p0: number;
+        p1: number;
+        p2: number;
+        sourceEvidenceRatio: number;
+        docNoiseRatio: number;
+    };
+    qualityScore?: number;
 }
 
 export interface CoraWikiLLMConfig {
-    provider: 'kimi' | 'openai' | 'openrouter';
+    provider: 'kimi' | 'openai' | 'openrouter' | 'minimax';
     baseUrl: string;
     model: string;
     apiKey: string;
-    fallbackProvider?: 'openai' | 'openrouter' | 'kimi';
+    fallbackProvider?: 'openai' | 'openrouter' | 'kimi' | 'minimax';
     defaultHeaders?: Record<string, string>;
 }
 

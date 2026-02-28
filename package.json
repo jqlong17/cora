@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "%extension.description%",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -65,6 +65,12 @@
           "name": "%view.coraWiki%",
           "when": "true",
           "size": 1
+        },
+        {
+          "id": "coraPlan",
+          "name": "%view.coraPlan%",
+          "when": "true",
+          "size": 1
         }
       ]
     },
@@ -84,6 +90,10 @@
       {
         "view": "coraWiki",
         "contents": "%welcome.coraWiki%"
+      },
+      {
+        "view": "coraPlan",
+        "contents": "%welcome.coraPlan%"
       }
     ],
     "commands": [
@@ -99,6 +109,16 @@
       },
       {
         "command": "knowledgeBase.togglePageView",
+        "title": "%cmd.togglePageView%",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "knowledgeBase.togglePageViewTree",
+        "title": "%cmd.togglePageView%",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "knowledgeBase.togglePageViewFlat",
         "title": "%cmd.togglePageView%",
         "icon": "$(list-flat)"
       },
@@ -204,12 +224,59 @@
       {
         "command": "knowledgeBase.setSortOrder",
         "title": "%cmd.sort%",
-        "icon": "$(sort-precedence)"
+        "icon": "$(arrow-down)"
       },
       {
         "command": "knowledgeBase.startCoraWikiResearch",
         "title": "%cmd.startCoraWikiResearch%",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "knowledgeBase.startCoraWikiWorkspaceArchitectureResearch",
+        "title": "%cmd.startCoraWikiWorkspaceArchitectureResearch%",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "knowledgeBase.openLatestCoraWikiReport",
+        "title": "%cmd.openLatestCoraWikiReport%",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "knowledgeBase.openCoraWikiReport",
+        "title": "%cmd.openCoraWikiReport%"
+      },
+      {
+        "command": "knowledgeBase.deleteCoraWikiReport",
+        "title": "%cmd.deleteCoraWikiReport%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "knowledgeBase.openCoraWikiReference",
+        "title": "%cmd.openCoraWikiReference%"
+      },
+      {
+        "command": "knowledgeBase.openPlanConstraints",
+        "title": "%cmd.openPlanConstraints%",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "knowledgeBase.openPlanReadme",
+        "title": "%cmd.openPlanReadme%",
+        "icon": "$(book)"
+      },
+      {
+        "command": "knowledgeBase.installPlanConstraintsToWorkspace",
+        "title": "%cmd.installPlanConstraintsToWorkspace%",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "knowledgeBase.openCoraPlanPlan",
+        "title": "%cmd.openCoraPlanPlan%"
+      },
+      {
+        "command": "knowledgeBase.deleteCoraPlanPlan",
+        "title": "%cmd.deleteCoraPlanPlan%",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -222,12 +289,12 @@
       ],
       "view/title": [
         {
-          "command": "knowledgeBase.setPageViewModeTree",
+          "command": "knowledgeBase.showAllFiles",
           "when": "view == pageTree",
           "group": "navigation@1"
         },
         {
-          "command": "knowledgeBase.setPageViewModeFlat",
+          "command": "knowledgeBase.showMarkdownOnly",
           "when": "view == pageTree",
           "group": "navigation@2"
         },
@@ -237,12 +304,17 @@
           "group": "navigation@3"
         },
         {
-          "command": "knowledgeBase.setSortOrder",
-          "when": "view == pageTree",
+          "command": "knowledgeBase.togglePageViewTree",
+          "when": "view == pageTree && coraPageTreeViewLayout == 'tree'",
           "group": "navigation@4"
         },
         {
-          "command": "knowledgeBase.toggleFilter",
+          "command": "knowledgeBase.togglePageViewFlat",
+          "when": "view == pageTree && coraPageTreeViewLayout == 'flat'",
+          "group": "navigation@4"
+        },
+        {
+          "command": "knowledgeBase.setSortOrder",
           "when": "view == pageTree",
           "group": "navigation@5"
         },
@@ -282,9 +354,29 @@
           "group": "navigation@2"
         },
         {
-          "command": "knowledgeBase.startCoraWikiResearch",
-          "when": "view == coraWiki",
+          "command": "knowledgeBase.startCoraWikiWorkspaceArchitectureResearch",
+          "when": "view == coraWiki && !corawikiResearchRunning",
           "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.startCoraWikiResearch",
+          "when": "view == coraWiki && !corawikiResearchRunning",
+          "group": "navigation@2"
+        },
+        {
+          "command": "knowledgeBase.openPlanConstraints",
+          "when": "view == coraPlan",
+          "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.openPlanReadme",
+          "when": "view == coraPlan",
+          "group": "navigation@2"
+        },
+        {
+          "command": "knowledgeBase.installPlanConstraintsToWorkspace",
+          "when": "view == coraPlan",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -337,6 +429,46 @@
           "command": "knowledgeBase.copyRelativePath",
           "when": "view == pageTree",
           "group": "3_file@3"
+        },
+        {
+          "command": "knowledgeBase.deleteCoraWikiReport",
+          "when": "view == coraWiki && viewItem == coraWiki.report",
+          "group": "4_file@1"
+        },
+        {
+          "command": "knowledgeBase.revealInFinder",
+          "when": "view == coraWiki && viewItem == coraWiki.report",
+          "group": "4_file@2"
+        },
+        {
+          "command": "knowledgeBase.copyPath",
+          "when": "view == coraWiki && viewItem == coraWiki.report",
+          "group": "4_file@3"
+        },
+        {
+          "command": "knowledgeBase.copyRelativePath",
+          "when": "view == coraWiki && viewItem == coraWiki.report",
+          "group": "4_file@4"
+        },
+        {
+          "command": "knowledgeBase.deleteCoraPlanPlan",
+          "when": "view == coraPlan && viewItem == coraPlan.planFile",
+          "group": "4_file@1"
+        },
+        {
+          "command": "knowledgeBase.revealInFinder",
+          "when": "view == coraPlan && viewItem == coraPlan.planFile",
+          "group": "4_file@2"
+        },
+        {
+          "command": "knowledgeBase.copyPath",
+          "when": "view == coraPlan && viewItem == coraPlan.planFile",
+          "group": "4_file@3"
+        },
+        {
+          "command": "knowledgeBase.copyRelativePath",
+          "when": "view == coraPlan && viewItem == coraPlan.planFile",
+          "group": "4_file@4"
         }
       ]
     },
@@ -356,9 +488,14 @@
           ],
           "description": "%config.filterMode.description%"
         },
+        "knowledgeBase.showHiddenFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.showHiddenFiles.description%"
+        },
         "knowledgeBase.pageViewMode": {
           "type": "string",
-          "default": "tree",
+          "default": "flat",
           "enum": [
             "tree",
             "flat",
@@ -376,7 +513,8 @@
           "default": [
             ".md",
             ".markdown",
-            ".mdx"
+            ".mdx",
+            ".mdc"
           ],
           "description": "%config.markdownExtensions.description%"
         },
@@ -397,7 +535,7 @@
         },
         "knowledgeBase.sortOrder": {
           "type": "string",
-          "default": "nameAsc",
+          "default": "ctimeDesc",
           "enum": [
             "nameAsc",
             "nameDesc",
@@ -416,13 +554,27 @@
           ],
           "description": "%config.sortOrder.description%"
         },
+        "knowledgeBase.displayLanguage": {
+          "type": "string",
+          "default": "zh",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "enumDescriptions": [
+            "%config.displayLanguage.zh%",
+            "%config.displayLanguage.en%"
+          ],
+          "description": "%config.displayLanguage.description%"
+        },
         "knowledgeBase.coraWiki.provider": {
           "type": "string",
           "default": "openai",
           "enum": [
             "kimi",
             "openai",
-            "openrouter"
+            "openrouter",
+            "minimax"
           ],
           "description": "%config.coraWiki.provider.description%"
         },
@@ -447,7 +599,8 @@
           "enum": [
             "openai",
             "openrouter",
-            "kimi"
+            "kimi",
+            "minimax"
           ],
           "description": "%config.coraWiki.fallbackProvider.description%"
         },
@@ -457,6 +610,13 @@
           "minimum": 1,
           "maximum": 50,
           "description": "%config.coraWiki.maxSteps.description%"
+        },
+        "knowledgeBase.coraWiki.maxTotalTokens": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 1000,
+          "maximum": 1000000,
+          "description": "%config.coraWiki.maxTotalTokens.description%"
         },
         "knowledgeBase.coraWiki.include": {
           "type": "array",
@@ -479,6 +639,16 @@
           "minimum": 0,
           "maximum": 3600,
           "description": "%config.coraWiki.cacheTtlSec.description%"
+        },
+        "knowledgeBase.coraWiki.pythonTooling.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.coraWiki.pythonTooling.enabled.description%"
+        },
+        "knowledgeBase.coraWiki.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "%config.coraWiki.pythonPath.description%"
         },
         "knowledgeBase.fontFamily": {
           "type": "string",
@@ -520,9 +690,18 @@
         "viewType": "cora.markdown.preview",
         "displayName": "Cora Preview",
         "selector": [
-          { "filenamePattern": "*.md" },
-          { "filenamePattern": "*.markdown" },
-          { "filenamePattern": "*.mdx" }
+          {
+            "filenamePattern": "*.md"
+          },
+          {
+            "filenamePattern": "*.markdown"
+          },
+          {
+            "filenamePattern": "*.mdx"
+          },
+          {
+            "filenamePattern": "*.mdc"
+          }
         ],
         "priority": "option"
       }
@@ -568,6 +747,7 @@
     "typescript": "^5.5.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@types/marked": "^5.0.2",
     "marked": "^17.0.3",
     "mermaid": "^11.12.3",

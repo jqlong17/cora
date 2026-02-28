@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 
 /**
- * 界面语言：与 VS Code / Cursor 一致。
- * Cursor 基于 VS Code，使用同一套 API，语言由 vscode.env.language 决定（如 zh-cn、en）。
- * 若在非 VS Code 环境中运行，可在此处增加 fallback（如 process.env.VSCODE_NLS_CONFIG）。
+ * 界面语言：默认中文；用户可在 VS Code 设置中将 knowledgeBase.displayLanguage 设为 "en" 切换为英文。
  */
-const lang = vscode.env.language;
+function getDisplayLanguage(): string {
+    return vscode.workspace.getConfiguration('knowledgeBase').get<string>('displayLanguage') ?? 'zh';
+}
+
 export const isChinese = (): boolean =>
-    lang === 'zh-cn' || lang === 'zh-tw';
+    getDisplayLanguage() !== 'en';
 
 /** 用于 HTML lang 属性，与界面语言一致 */
 export const htmlLang = (): string => (isChinese() ? 'zh-CN' : 'en');
@@ -41,6 +42,9 @@ const zh: Messages = {
         selectFileFirst: '请先选择一个文件',
         openFileFirst: '请先打开一个文件',
         unknownFile: '无法识别当前文件',
+        openFailed: '打开失败',
+        installFailed: '安装失败',
+        deleteFailed: '删除失败',
     },
     search: {
         prompt: '输入搜索关键词',
@@ -51,12 +55,44 @@ const zh: Messages = {
     },
     coraWiki: {
         emptyHint: '点击标题栏按钮开始 CoraWiki 研究',
+        welcomeIntro: 'CoraWiki 将使用 AI 自动分析代码架构，生成代码架构分析报告。',
+        welcomeButton: '开始分析当前工作区架构',
+        latestReportTag: '最新',
         referencesTitle: '证据引用',
         queryPrompt: '输入要研究的代码问题',
         queryPlaceholder: '例如：订单创建后到落库的完整链路是什么？',
         running: 'CoraWiki 正在分析代码...',
         keyMissing: '未检测到环境变量 {env}，将降级为本地模式运行',
         runFailed: 'CoraWiki 运行失败：{error}',
+        reportSaved: 'CoraWiki 报告已生成：{path}',
+        alreadyRunning: '已有分析任务在运行，请等待完成或点击通知中的「取消」终止',
+        cancelled: 'CoraWiki 分析已终止',
+        noReportFound: '尚未找到 CoraWiki 报告，请先执行一次研究',
+        openReportFailed: '打开 CoraWiki 报告失败：{error}',
+        openReferenceFailed: '打开引用失败：{ref}，错误：{error}',
+        deleteReportConfirm: '确定要删除报告“{name}”吗？',
+        deleteReportConfirmMulti: '确定要删除选中的 {n} 个报告吗？',
+        deleteAction: '删除',
+        deleteReportDone: '报告已删除',
+        deleteReportDoneMulti: '已删除 {n} 个报告',
+        deleteReportFailed: '删除报告失败：{error}',
+        pythonNotFound: '未检测到 Python 或 CoraWiki Python 环境不可用。是否跳过本研究的 Python 分析？',
+        pythonSkip: '跳过',
+        pythonOpenWebsite: '打开 Python 官网',
+        pythonError: 'Python 执行出错：{error}。如何解决？',
+        pythonRetry: '重试',
+    },
+    cmd: {
+        openPlanConstraints: '打开 Plan 约束说明',
+        openPlanReadme: '打开 README 登记表',
+        installPlanConstraintsToWorkspace: '安装 Plan 约束到工作区',
+    },
+    coraPlan: {
+        installed: 'Plan 约束已安装到当前工作区',
+        confirmDelete: '确定要删除该 Plan 文件吗？',
+        deleted: 'Plan 文件已删除',
+        welcomeIntro: 'CoraPlan 将使用 DDD、TDD 的方法，辅助用户生成幻觉低、更可控的 plan 执行计划。',
+        welcomeButton: '在此工作区注入 CoraPlan',
     },
     sort: {
         title: '排序',
@@ -102,6 +138,15 @@ const zh: Messages = {
         panelTitleSuffix: ' （编辑）',
         mermaidError: '图表语法错误',
         mermaidLoading: '正在加载图表引擎...',
+        mermaidEngineFallback: '图表引擎未加载，显示源码：',
+        mermaidLoadFailed: '图表引擎加载失败，以上为 Mermaid 源码',
+        mermaidZoomIn: '放大',
+        mermaidZoomOut: '缩小',
+        mermaidDownloadPng: '下载为 PNG',
+        mermaidClose: '关闭',
+        mermaidDownloadSaved: '已保存：{path}',
+        mermaidDownloadFailed: '保存 PNG 失败：{error}',
+        openLinkFailed: '打开链接失败：{error}',
     },
     newNote: {
         untitledPrefix: '未命名笔记',
@@ -160,6 +205,9 @@ const en: Messages = {
         selectFileFirst: 'Please select a file first',
         openFileFirst: 'Please open a file first',
         unknownFile: 'Cannot identify current file',
+        openFailed: 'Open failed',
+        installFailed: 'Install failed',
+        deleteFailed: 'Delete failed',
     },
     search: {
         prompt: 'Enter search keyword(s)',
@@ -170,12 +218,44 @@ const en: Messages = {
     },
     coraWiki: {
         emptyHint: 'Use the title action to start CoraWiki research',
+        welcomeIntro: 'CoraWiki uses AI to analyze code architecture and generate architecture reports.',
+        welcomeButton: 'Start architecture analysis for current workspace',
+        latestReportTag: 'latest',
         referencesTitle: 'References',
         queryPrompt: 'Enter a code architecture question',
         queryPlaceholder: 'e.g. What is the end-to-end order creation flow?',
         running: 'CoraWiki is analyzing code...',
         keyMissing: 'Environment variable {env} not found. Running in local fallback mode.',
         runFailed: 'CoraWiki run failed: {error}',
+        reportSaved: 'CoraWiki report generated: {path}',
+        alreadyRunning: 'A CoraWiki analysis is already running. Wait for it to finish or click Cancel in the notification.',
+        cancelled: 'CoraWiki analysis cancelled',
+        noReportFound: 'No CoraWiki report found yet. Please run research first.',
+        openReportFailed: 'Failed to open CoraWiki report: {error}',
+        openReferenceFailed: 'Failed to open reference: {ref}, error: {error}',
+        deleteReportConfirm: 'Delete report "{name}"?',
+        deleteReportConfirmMulti: 'Delete selected {n} report(s)?',
+        deleteAction: 'Delete',
+        deleteReportDone: 'Report deleted',
+        deleteReportDoneMulti: 'Deleted {n} report(s)',
+        deleteReportFailed: 'Failed to delete report: {error}',
+        pythonNotFound: 'Python or CoraWiki Python environment not available. Skip Python analysis for this run?',
+        pythonSkip: 'Skip',
+        pythonOpenWebsite: 'Open Python website',
+        pythonError: 'Python execution failed: {error}. How to fix?',
+        pythonRetry: 'Retry',
+    },
+    cmd: {
+        openPlanConstraints: 'Open plan constraints',
+        openPlanReadme: 'Open README registry',
+        installPlanConstraintsToWorkspace: 'Install plan constraints to workspace',
+    },
+    coraPlan: {
+        installed: 'Plan constraints installed to workspace.',
+        confirmDelete: 'Delete this plan file?',
+        deleted: 'Plan file deleted.',
+        welcomeIntro: 'CoraPlan uses DDD and TDD approaches to help you generate low-hallucination, more controllable plan execution.',
+        welcomeButton: 'Set up CoraPlan in this workspace',
     },
     sort: {
         title: 'Sort',
@@ -221,6 +301,15 @@ const en: Messages = {
         panelTitleSuffix: ' (Edit)',
         mermaidError: 'Diagram syntax error',
         mermaidLoading: 'Loading diagram engine...',
+        mermaidEngineFallback: 'Chart engine not loaded, showing source:',
+        mermaidLoadFailed: 'Chart engine failed to load, above is Mermaid source.',
+        mermaidZoomIn: 'Zoom in',
+        mermaidZoomOut: 'Zoom out',
+        mermaidDownloadPng: 'Download as PNG',
+        mermaidClose: 'Close',
+        mermaidDownloadSaved: 'Saved: {path}',
+        mermaidDownloadFailed: 'Failed to save PNG: {error}',
+        openLinkFailed: 'Failed to open link: {error}',
     },
     newNote: {
         untitledPrefix: 'Untitled note',
@@ -241,9 +330,12 @@ const en: Messages = {
         folder: 'folder',
         file: 'file',
         deleteConfirm: 'Delete {type} "{name}"?',
+        deleteConfirmMulti: 'Delete selected {n} item(s)?',
         delete: 'Delete',
         deleted: 'Deleted {type}',
+        deletedMulti: 'Deleted {n} item(s)',
         deleteFailed: 'Failed to delete {type}',
+        deleteFailedMulti: 'Delete failed (some or all)',
         renamePrompt: 'Rename {type}',
         nameRequired: 'Name cannot be empty',
         nameSame: 'New name must be different',
@@ -252,7 +344,9 @@ const en: Messages = {
     },
 };
 
-const messages: Messages = isChinese() ? zh : en;
+function getMessages(): Messages {
+    return isChinese() ? zh : en;
+}
 
 function interpolate(s: string, vars: Record<string, string | number>): string {
     return s.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
@@ -260,6 +354,7 @@ function interpolate(s: string, vars: Record<string, string | number>): string {
 
 /** Get a message by key path, e.g. t('msg.copiedAbsolutePath') or t('search.matches', { n: 3 }) */
 export function t(key: string, vars?: Record<string, string | number>): string {
+    const messages = getMessages();
     const parts = key.split('.');
     let v: unknown = messages;
     for (const p of parts) {
@@ -269,4 +364,5 @@ export function t(key: string, vars?: Record<string, string | number>): string {
     return vars ? interpolate(s, vars) : s;
 }
 
-export { messages };
+/** Current messages (for tests); reflects active display language. */
+export const messages = (): Messages => getMessages();

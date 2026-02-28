@@ -70,6 +70,21 @@ suite('FileService Test Suite', () => {
         }
     });
 
+    test('getAllFilesSortedByConfig with filterMarkdownOnly returns only markdown files', async function () {
+        const folders = fileService.getWorkspaceFolders();
+        if (folders.length === 0) {
+            this.skip();
+            return;
+        }
+        fileService.clearFlatListCache();
+        const mdOnly = await fileService.getAllFilesSortedByConfig({ filterMarkdownOnly: true });
+        const mdExtensions = ['.md', '.markdown', '.mdx', '.mdc'];
+        for (const item of mdOnly) {
+            const ext = path.extname(item.name).toLowerCase();
+            assert.ok(mdExtensions.includes(ext), `filterMarkdownOnly: every file should have extension in ${mdExtensions.join(',')}, got ${item.name}`);
+        }
+    });
+
     test('getAllFilesSortedByConfig does not include files under .git', async function () {
         const folders = fileService.getWorkspaceFolders();
         if (folders.length === 0) {
@@ -79,5 +94,44 @@ suite('FileService Test Suite', () => {
         const all = await fileService.getAllFilesSortedByConfig();
         const underGit = all.filter(i => i.uri.fsPath.includes(path.sep + '.git' + path.sep) || i.uri.fsPath.endsWith(path.sep + '.git'));
         assert.strictEqual(underGit.length, 0, 'Flat list should not include any path under .git');
+    });
+
+    test('showHiddenFiles controls visibility of dotfiles in flat list', async function () {
+        const folders = fileService.getWorkspaceFolders();
+        if (folders.length === 0) {
+            this.skip();
+            return;
+        }
+
+        const workspaceConfig = vscode.workspace.getConfiguration('knowledgeBase');
+        const originalShowHidden = workspaceConfig.get<boolean>('showHiddenFiles');
+        const originalFilterMode = workspaceConfig.get<string>('filterMode');
+        const hiddenName = `.hidden-flat-test-${Date.now()}.md`;
+        const hiddenUri = await fileService.createFile(folders[0].uri, hiddenName);
+        if (!hiddenUri) {
+            this.skip();
+            return;
+        }
+
+        try {
+            await workspaceConfig.update('filterMode', 'all', true);
+            await workspaceConfig.update('showHiddenFiles', false, true);
+            configService.reload();
+            fileService.clearFlatListCache();
+            const hiddenOff = await fileService.getAllFilesSortedByConfig();
+            assert.ok(!hiddenOff.some(i => i.name === hiddenName), 'Hidden file should be excluded when showHiddenFiles is false');
+
+            await workspaceConfig.update('showHiddenFiles', true, true);
+            configService.reload();
+            fileService.clearFlatListCache();
+            const hiddenOn = await fileService.getAllFilesSortedByConfig();
+            assert.ok(hiddenOn.some(i => i.name === hiddenName), 'Hidden file should be included when showHiddenFiles is true');
+        } finally {
+            await fileService.deleteItem(hiddenUri);
+            await workspaceConfig.update('showHiddenFiles', originalShowHidden, true);
+            await workspaceConfig.update('filterMode', originalFilterMode, true);
+            configService.reload();
+            fileService.clearFlatListCache();
+        }
     });
 });

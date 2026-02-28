@@ -1,0 +1,18 @@
+---
+description: 创建或编辑 plan 文件时，先阅读并遵循 Plan 创建约束
+globs: "**/.cursor/plans/**"
+alwaysApply: false
+---
+
+# Plan 创建与编辑约束
+
+当你在**创建**或**编辑** `.cursor/plans/` 下的 plan 文件时（或打开本目录下任意文件时本规则会生效），必须按以下步骤执行：
+
+1. **先阅读** [.cursor/plans/00-PLAN-CONSTRAINTS.md](.cursor/plans/00-PLAN-CONSTRAINTS.md) 的完整内容。
+2. **再遵循**该文档中的约束进行编写或修改，包括：
+   - Frontmatter 约定（name、overview、todos、isProject）
+   - 正文结构：完成标准与测试要求前置，每模块具备「现状 → 目标 → 实现要点 → 验收」，文末有依赖与顺序建议
+   - 方法论：契约先行、验收即测试、先定验收再实现、实现要点可追溯（文件/行号）
+   - 禁止项：无验收即完成、无测试要求、不写依赖与顺序、实现要点模糊
+
+在未阅读并应用上述约束前，不要开始撰写或大幅修改 plan 内容。

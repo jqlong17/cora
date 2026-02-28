@@ -5,12 +5,14 @@ import { ConfigService } from '../services/configService';
 import { FavoritesService } from '../services/favoritesService';
 import { isMarkdownFile } from '../utils/markdownParser';
 import { t } from '../utils/i18n';
+import { DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
 
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
         public readonly item: FileItem,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        descriptionOverride?: string
+        descriptionOverride?: string,
+        markdownExtensions?: string[]
     ) {
         super(item.name, collapsibleState);
 
@@ -19,7 +21,7 @@ export class PageTreeItem extends vscode.TreeItem {
 
         if (item.type === 'file') {
             this.iconPath = new vscode.ThemeIcon('file');
-            const isMarkdown = /\.(md|markdown)$/i.test(item.name);
+            const isMarkdown = isMarkdownFile(item.name, markdownExtensions ?? DEFAULT_MARKDOWN_EXTENSIONS);
             this.command = isMarkdown
                 ? { command: 'knowledgeBase.openPreview', title: t('common.openPreview'), arguments: [item.uri] }
                 : { command: 'vscode.open', title: t('common.openFile'), arguments: [item.uri] };
@@ -71,12 +73,13 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
 
     async getChildren(element?: PageTreeItem): Promise<PageTreeItem[]> {
         const pageViewMode = this.configService.getPageViewMode();
+        const filterMode = this.configService.getFilterMode();
+        const filterMarkdownOnly = filterMode === 'markdown';
 
         if (pageViewMode === 'favorites' && this.favoritesService) {
             if (element !== undefined) return [];
             const uriStrings = this.favoritesService.getFavorites();
             const folders = this.fileService.getWorkspaceFolders();
-            const filterMode = this.configService.getFilterMode();
             const markdownExtensions = this.configService.getMarkdownExtensions();
             const sortOrder = this.configService.getSortOrder();
             const withStat: { uri: vscode.Uri; name: string; mtime: number; ctime: number }[] = [];
@@ -85,7 +88,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
                     const uri = vscode.Uri.parse(uriStr);
                     const stat = await vscode.workspace.fs.stat(uri);
                     const name = path.basename(uri.fsPath);
-                    if (filterMode === 'markdown' && !isMarkdownFile(name, markdownExtensions)) {
+                    if (filterMarkdownOnly && !isMarkdownFile(name, markdownExtensions)) {
                         continue;
                     }
                     withStat.push({
@@ -120,7 +123,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
                         if (rel !== name) descriptionOverride = rel;
                     }
                 }
-                const treeItem = new PageTreeItem(fileItem, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                const treeItem = new PageTreeItem(fileItem, vscode.TreeItemCollapsibleState.None, descriptionOverride, markdownExtensions);
                 treeItem.contextValue = 'file+favorite';
                 treeItem.iconPath = new vscode.ThemeIcon('star-empty');
                 items.push(treeItem);
@@ -132,7 +135,8 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             if (element !== undefined) {
                 return [];
             }
-            const items = await this.fileService.getAllFilesSortedByConfig();
+            const markdownExtensions = this.configService.getMarkdownExtensions();
+            const items = await this.fileService.getAllFilesSortedByConfig({ filterMarkdownOnly });
             const folders = this.fileService.getWorkspaceFolders();
             return items.map((item: FileItem) => {
                 let descriptionOverride: string | undefined;
@@ -145,7 +149,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
                         }
                     }
                 }
-                const treeItem = new PageTreeItem(item, vscode.TreeItemCollapsibleState.None, descriptionOverride);
+                const treeItem = new PageTreeItem(item, vscode.TreeItemCollapsibleState.None, descriptionOverride, markdownExtensions);
                 if (this.favoritesService?.isFavorite(item.uri)) {
                     treeItem.contextValue = 'file+favorite';
                     treeItem.iconPath = new vscode.ThemeIcon('star-empty');
@@ -154,12 +158,13 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
             });
         }
 
-        const items = await this.fileService.getChildren(element?.item);
+        const markdownExtensions = this.configService.getMarkdownExtensions();
+        const items = await this.fileService.getChildren(element?.item, { filterMarkdownOnly });
         return items.map(item => {
             const collapsibleState = item.type === 'directory'
                 ? vscode.TreeItemCollapsibleState.Collapsed
                 : vscode.TreeItemCollapsibleState.None;
-            const treeItem = new PageTreeItem(item, collapsibleState);
+            const treeItem = new PageTreeItem(item, collapsibleState, undefined, markdownExtensions);
             if (item.type === 'file' && this.favoritesService?.isFavorite(item.uri)) {
                 treeItem.contextValue = 'file+favorite';
                 treeItem.iconPath = new vscode.ThemeIcon('star-empty');
@@ -169,8 +174,8 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     }
 
     async getParent(element: PageTreeItem): Promise<PageTreeItem | null> {
-        const mode = this.configService.getPageViewMode();
-        if (mode === 'flat' || mode === 'favorites') {
+        const pageViewMode = this.configService.getPageViewMode();
+        if (pageViewMode === 'flat' || pageViewMode === 'favorites') {
             return null;
         }
         const parentPath = element.item.uri.fsPath.split('/').slice(0, -1).join('/');
@@ -191,7 +196,6 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     async expandAll(): Promise<void> {
         // Note: VS Code TreeView API doesn't support programmatic expansion of all nodes
         // This would require tracking all visible nodes and calling reveal on each
-        // For now, this is a placeholder for future implementation
-        vscode.window.showInformationMessage(t('msg.expandAllLater'));
+        // Placeholder for future implementation; no toast to avoid noise
     }
 }

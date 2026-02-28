@@ -1,7 +1,7 @@
-import * as vscode from 'vscode';
 import { ConfigService } from '../services/configService';
 import { PageTreeProvider } from '../providers/pageTreeProvider';
 import { FilterMode } from '../utils/constants';
+import { syncPageTreeViewLayoutContext } from '../utils/pageTreeContext';
 
 export async function toggleFilter(
     configService: ConfigService,
@@ -18,9 +18,12 @@ export async function setFilterMode(
     configService: ConfigService,
     pageTreeProvider: PageTreeProvider
 ): Promise<void> {
+    // 若当前在收藏视图，先切回树状视图，否则仅改 filter 不会生效（getChildren 仍走 favorites 分支）
+    const pageViewMode = configService.getPageViewMode();
+    if (pageViewMode === 'favorites') {
+        await configService.setPageViewMode('tree');
+        syncPageTreeViewLayoutContext(configService);
+    }
     await configService.setFilterMode(mode);
     pageTreeProvider.refresh();
-
-    const message = mode === 'all' ? '已切换为显示全部文件' : '已切换为仅显示 Markdown 文件';
-    vscode.window.showInformationMessage(message);
 }

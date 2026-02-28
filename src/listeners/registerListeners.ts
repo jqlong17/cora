@@ -9,7 +9,7 @@ export function syncEditorAssociationsForPreviewOnClick(configService: ConfigSer
     const useCora = configService.getPreviewOnClick();
     const cfg = vscode.workspace.getConfiguration('workbench');
     const current = cfg.get<Record<string, string>>('editorAssociations') ?? {};
-    const patterns = ['*.md', '*.markdown', '*.mdx'];
+    const patterns = ['*.md', '*.markdown', '*.mdx', '*.mdc'];
     const next = { ...current };
     if (useCora) {
         for (const p of patterns) next[p] = CORA_MARKDOWN_VIEW_TYPE;

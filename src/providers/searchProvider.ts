@@ -93,20 +93,13 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
             if (fallbackResults.length > 0) {
                 this.isFallbackMode = true;
                 this.searchResults = fallbackResults;
-                vscode.window.showInformationMessage(
-                    t('msg.noMatchFallback', { n: fallbackResults.length })
-                );
             } else {
                 this.isFallbackMode = false;
                 this.searchResults = [];
-                vscode.window.showInformationMessage(t('msg.noMatch'));
             }
         } else {
             this.isFallbackMode = false;
             this.searchResults = results;
-            if (results.length === 0) {
-                vscode.window.showInformationMessage(t('msg.noMatch'));
-            }
         }
 
         this.refresh();
@@ -187,14 +180,20 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
     private async getAllMarkdownFiles(dir: string, extensions: string[]): Promise<string[]> {
         const files: string[] = [];
+        const showHiddenFiles = this.configService.getShowHiddenFiles();
 
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
 
         for (const entry of entries) {
             const fullPath = path.join(dir, entry.name);
 
-            // 跳过隐藏文件和文件夹
-            if (entry.name.startsWith('.')) {
+            // 始终跳过 .git
+            if (entry.isDirectory() && entry.name === '.git') {
+                continue;
+            }
+
+            // 按配置决定是否跳过隐藏文件和目录
+            if (!showHiddenFiles && entry.name.startsWith('.')) {
                 continue;
             }
 

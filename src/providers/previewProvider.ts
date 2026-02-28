@@ -3,11 +3,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { marked } from 'marked';
 import { t, htmlLang } from '../utils/i18n';
+import {
+    parseCommandUri,
+    parseFileLink
+} from '../utils/previewLinkParser';
 
 /**
  * 自定义 Markdown 预览提供者 (Typora 实时编辑模式)
  * 采用 Milkdown 引擎实现混合预览编辑体验；含 HTML 的文档使用 Marked 只读预览（方案二）
  */
+const CONTENT_CACHE_MAX = 20;
+
 export class PreviewProvider {
     private panel: vscode.WebviewPanel | undefined;
     private currentUri: vscode.Uri | undefined;
@@ -16,12 +22,23 @@ export class PreviewProvider {
     private pendingScrollLine: number | undefined;
     /** 当前面板是否为 Marked 只读模式（含 HTML 文档），用于切换文件时决定是否整页重载 */
     private currentPreviewMode: 'milkdown' | 'marked' = 'milkdown';
+    /** URI + mtime 内容缓存，避免同文档重复读盘 */
+    private contentCache = new Map<string, { content: string; mtimeMs: number }>();
 
     constructor(
         private context: vscode.ExtensionContext,
         private onDocumentSaved?: (uri: vscode.Uri) => void,
         private onContentChanged?: (uri: vscode.Uri, content: string) => void
-    ) { }
+    ) {
+        const watcherMd = vscode.workspace.createFileSystemWatcher('**/*.md');
+        watcherMd.onDidChange((uri: vscode.Uri) => this.clearContentCacheForUri(uri));
+        watcherMd.onDidDelete((uri: vscode.Uri) => this.clearContentCacheForUri(uri));
+        context.subscriptions.push(watcherMd);
+        const watcherMdc = vscode.workspace.createFileSystemWatcher('**/*.mdc');
+        watcherMdc.onDidChange((uri: vscode.Uri) => this.clearContentCacheForUri(uri));
+        watcherMdc.onDidDelete((uri: vscode.Uri) => this.clearContentCacheForUri(uri));
+        context.subscriptions.push(watcherMdc);
+    }
 
     /**
      * 打开预览面板
@@ -37,7 +54,11 @@ export class PreviewProvider {
             this.panel.reveal(vscode.ViewColumn.One);
 
             if (line !== undefined) {
-                this.panel.webview.postMessage({ command: 'scrollToLine', line });
+                // 延迟发送 scrollToLine，确保 webview 已处理完 updateContent 并完成 DOM 更新（Milkdown replaceAll 为异步）
+                const lineToScroll = line;
+                setTimeout(() => {
+                    this.panel?.webview.postMessage({ command: 'scrollToLine', line: lineToScroll });
+                }, 120);
             }
             return;
         }
@@ -61,11 +82,30 @@ export class PreviewProvider {
         });
 
         this.panel.webview.onDidReceiveMessage(async (msg) => {
-            if (!this.panel || !this.currentUri) return;
+            if (!this.panel) return;
 
             if (msg.command === 'openEditor') {
                 console.log('[Cora] Webview requested switch to source for:', this.currentUri?.fsPath);
                 vscode.commands.executeCommand('knowledgeBase.openEditor', this.currentUri);
+                return;
+            }
+
+            if (msg.command === 'openFind') {
+                this.panel.reveal(vscode.ViewColumn.One, false);
+                const findCommands = [
+                    'workbench.action.webview.find',
+                    'editor.action.webvieweditor.find',
+                    'editor.action.find',
+                    'actions.find'
+                ];
+                for (const cmd of findCommands) {
+                    try {
+                        await vscode.commands.executeCommand(cmd);
+                        break;
+                    } catch {
+                        // try next fallback command
+                    }
+                }
                 return;
             }
 
@@ -76,6 +116,43 @@ export class PreviewProvider {
                         line: this.pendingScrollLine
                     });
                     this.pendingScrollLine = undefined;
+                }
+                return;
+            }
+
+            if (msg.command === 'openLink' && typeof msg.href === 'string' && msg.href.trim()) {
+                const href = msg.href.trim();
+                try {
+                    const cmd = parseCommandUri(href);
+                    if (cmd) {
+                        await vscode.commands.executeCommand(cmd.commandId, ...cmd.args);
+                        return;
+                    }
+                    const workspace = vscode.workspace.workspaceFolders?.[0];
+                    if (!workspace) return;
+                    const baseDir = this.currentUri
+                        ? path.dirname(this.currentUri.fsPath)
+                        : workspace.uri.fsPath;
+                    const fileResult = parseFileLink(href, baseDir);
+                    if (fileResult) {
+                        const uri = vscode.Uri.file(fileResult.resolvedPath);
+                        const doc = await vscode.workspace.openTextDocument(uri);
+                        const editor = await vscode.window.showTextDocument(doc, { preview: false });
+                        if (fileResult.line != null && fileResult.line > 0) {
+                            const lineIndex = Math.min(
+                                fileResult.line - 1,
+                                Math.max(0, doc.lineCount - 1)
+                            );
+                            const pos = new vscode.Position(lineIndex, 0);
+                            editor.selection = new vscode.Selection(pos, pos);
+                            editor.revealRange(
+                                new vscode.Range(pos, pos),
+                                vscode.TextEditorRevealType.InCenter
+                            );
+                        }
+                    }
+                } catch (e) {
+                    vscode.window.showErrorMessage(t('preview.openLinkFailed', { error: String(e) }));
                 }
                 return;
             }
@@ -94,6 +171,7 @@ export class PreviewProvider {
                             uriToSave,
                             new TextEncoder().encode(contentToSave)
                         );
+                        this.clearContentCacheForUri(uriToSave);
                         if (this.currentUri?.toString() === uriToSave.toString()) {
                             this.lastSavedContent = contentToSave;
                         }
@@ -125,10 +203,10 @@ export class PreviewProvider {
         if (!this.panel || !this.currentUri) return;
         const uriForThisUpdate = this.currentUri;
         try {
-            const content = await fs.promises.readFile(uriForThisUpdate.fsPath, 'utf8');
+            const content = await this.getContentForUri(uriForThisUpdate);
             if (this.currentUri?.toString() !== uriForThisUpdate.toString()) return;
             this.lastSavedContent = content;
-            const newMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
+            const newMode = (this.containsHtmlBlock(content) || this.isReportUri(uriForThisUpdate)) ? 'marked' : 'milkdown';
             if (newMode !== this.currentPreviewMode) {
                 await this.updatePreview();
                 return;
@@ -158,10 +236,10 @@ export class PreviewProvider {
         if (!this.panel || !this.currentUri) return;
         const uriForThisLoad = this.currentUri;
         try {
-            const content = await fs.promises.readFile(uriForThisLoad.fsPath, 'utf8');
+            const content = await this.getContentForUri(uriForThisLoad);
             if (this.currentUri?.toString() !== uriForThisLoad.toString()) return;
             this.lastSavedContent = content;
-            this.currentPreviewMode = this.containsHtmlBlock(content) ? 'marked' : 'milkdown';
+            this.currentPreviewMode = (this.containsHtmlBlock(content) || this.isReportUri(uriForThisLoad)) ? 'marked' : 'milkdown';
             this.panel.webview.html = this.generateHtml(content, uriForThisLoad, this.panel.webview);
         } catch (error) {
             console.error('Error loading editor:', error);
@@ -178,12 +256,49 @@ export class PreviewProvider {
         }
     }
 
+    openLocalFindBar(): void {
+        if (!this.panel) {
+            return;
+        }
+        this.panel.reveal(vscode.ViewColumn.One, false);
+        this.panel.webview.postMessage({ command: 'openLocalFind' });
+    }
+
+    /** 使指定 URI 的内容缓存失效（保存或文件变更时调用） */
+    private clearContentCacheForUri(uri: vscode.Uri): void {
+        this.contentCache.delete(uri.toString());
+    }
+
+    /**
+     * 根据 URI 取内容：先 stat 取 mtime，命中缓存则返回缓存，否则 readFile 并写入缓存。
+     */
+    private async getContentForUri(uri: vscode.Uri): Promise<string> {
+        const key = uri.toString();
+        let stat: fs.Stats;
+        try {
+            stat = await fs.promises.stat(uri.fsPath);
+        } catch (e) {
+            this.contentCache.delete(key);
+            throw e;
+        }
+        const mtimeMs = stat.mtimeMs;
+        const cached = this.contentCache.get(key);
+        if (cached && cached.mtimeMs === mtimeMs) return cached.content;
+        const content = await fs.promises.readFile(uri.fsPath, 'utf8');
+        if (this.contentCache.size >= CONTENT_CACHE_MAX) {
+            const firstKey = this.contentCache.keys().next().value;
+            if (firstKey !== undefined) this.contentCache.delete(firstKey);
+        }
+        this.contentCache.set(key, { content, mtimeMs });
+        return content;
+    }
+
     /**
      * 供 Custom Editor 使用：根据 uri 和 webview 生成预览 HTML（读文件后调用 generateHtml）
      */
     async getPreviewHtml(uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
         try {
-            const content = await fs.promises.readFile(uri.fsPath, 'utf8');
+            const content = await this.getContentForUri(uri);
             return this.generateHtml(content, uri, webview);
         } catch {
             return this.getErrorHtml(t('preview.loadError'));
@@ -251,6 +366,11 @@ export class PreviewProvider {
         return /<[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>|<\s*\/\s*[a-zA-Z]/.test(content);
     }
 
+    /** 检测文档是否包含 ```mermaid 代码块，用于按需注入 Mermaid 脚本 */
+    private containsMermaidBlock(content: string): boolean {
+        return /^```\s*mermaid\s*$/im.test(content);
+    }
+
     /** 清洗 marked 输出：移除 script 与事件属性，避免 XSS */
     private sanitizeHtml(html: string): string {
         let out = html
@@ -308,11 +428,8 @@ export class PreviewProvider {
     private generateMarkedOnlyHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
         const extensionUri = this.context.extensionUri;
         const editorMarkedJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor-marked.js'));
-        const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
-        const fontCascadiaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
-        const fontGoogleSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
-        const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
-        const fontNotoSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+        const hasMermaid = this.containsMermaidBlock(markdown);
+        const mermaidJsUri = hasMermaid ? webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js')) : '';
 
         const nonce = this.getNonce();
         const config = vscode.workspace.getConfiguration('knowledgeBase');
@@ -324,16 +441,20 @@ export class PreviewProvider {
         let fontCss = '';
         let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         if (fontFamily === 'Cascadia Mono') {
-            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Cascadia Mono Custom', monospace";
         } else if (fontFamily === 'Google Sans') {
-            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Google Sans Custom', sans-serif";
         } else if (fontFamily === 'IBM Plex Mono') {
-            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'IBM Plex Mono Custom', monospace";
         } else if (fontFamily === 'Noto Sans SC') {
-            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Noto Sans SC Custom', sans-serif";
         }
 
@@ -346,7 +467,15 @@ export class PreviewProvider {
         const tabMarkdown = t('preview.tabMarkdown');
 
         const addToChatLabel = t('preview.addToChat');
-        const i18nMermaid = JSON.stringify({ mermaidError: t('preview.mermaidError'), mermaidLoading: t('preview.mermaidLoading') }).replace(/<\/script>/gi, '\\u003c/script>');
+        const i18nMermaid = JSON.stringify({
+            mermaidError: t('preview.mermaidError'),
+            mermaidLoading: t('preview.mermaidLoading'),
+            mermaidEngineFallback: t('preview.mermaidEngineFallback'),
+            mermaidLoadFailed: t('preview.mermaidLoadFailed')
+        }).replace(/<\/script>/gi, '\\u003c/script>');
+        const mermaidScript = hasMermaid
+            ? `window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_I18N__ = ${i18nMermaid};`
+            : `window.__CORA_MERMAID__ = ""; window.__CORA_I18N__ = ${i18nMermaid};`;
         return `<!DOCTYPE html>
 <html lang="${htmlLang()}">
 <head>
@@ -358,6 +487,8 @@ export class PreviewProvider {
     <style>
         ${fontCss}
         body { font-family: ${targetFontFamily}; background: var(--vscode-editor-background, #fff); color: var(--vscode-editor-foreground, #24292f); margin: 0; padding: 0; overflow: hidden; -webkit-font-smoothing: antialiased; }
+        ::highlight(cora-find-hit) { background: var(--vscode-editor-findMatchHighlightBackground, rgba(86, 156, 214, 0.25)); }
+        ::highlight(cora-find-active) { background: var(--vscode-editor-findMatchBackground, rgba(86, 156, 214, 0.45)); }
         .top-bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--vscode-editor-background, #fff); border-bottom: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.08)); display: flex; align-items: center; justify-content: center; padding: 0 20px; z-index: 1001; }
         .mode-switch-wrapper { position: absolute; right: 40px; display: flex; background: #eee; border-radius: 4px; padding: 2px; gap: 2px; user-select: none; }
         .mode-tab { padding: 3px 12px; font-size: 12px; border-radius: 3px; cursor: pointer; transition: all 0.2s ease; color: #666; min-width: 40px; text-align: center; }
@@ -371,9 +502,9 @@ export class PreviewProvider {
         #marked-preview tbody td { border: 1px solid var(--vscode-widget-border, #e1e4e8); padding: 8px 12px; text-align: left; background: var(--vscode-editor-background, #fff); }
         #marked-preview tbody td a { color: #0969da; text-decoration: underline; }
         #marked-preview img { max-width: 100%; height: auto; }
-        /* 代码块：浅灰底、圆角、等宽字体、内边距与行高 */
-        #marked-preview pre { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); border-radius: 6px; padding: 12px 16px; margin: 16px 0; overflow: auto; line-height: 1.45; border: 1px solid var(--vscode-widget-border, #e1e4e8); }
-        #marked-preview pre code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; background: transparent; padding: 0; color: var(--vscode-editor-foreground, #24292f); }
+        /* 代码块：浅灰底、圆角、等宽字体、保留空格与换行以正确显示 ASCII 树 */
+        #marked-preview pre { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); border-radius: 6px; padding: 12px 16px; margin: 16px 0; overflow: auto; line-height: 1.45; border: 1px solid var(--vscode-widget-border, #e1e4e8); white-space: pre; }
+        #marked-preview pre code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; background: transparent; padding: 0; color: var(--vscode-editor-foreground, #24292f); white-space: pre; }
         #marked-preview code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); padding: 2px 6px; border-radius: 4px; }
         #source-editor-container { width: 100%; height: 100%; display: none; background: var(--vscode-editor-background); }
         .source-editor-wrapper { display: flex; width: 100%; height: 100%; }
@@ -407,28 +538,30 @@ export class PreviewProvider {
     </div>
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
-    <script nonce="${nonce}">window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_I18N__ = ${i18nMermaid};</script>
+    <script nonce="${nonce}">${mermaidScript}</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
 </html>`;
+    }
+
+    /** 是否为 CoraWiki 报告路径（强制走 Marked 预览，避免 Mermaid 卡在 Loading） */
+    private isReportUri(uri: vscode.Uri): boolean {
+        const normalized = uri.fsPath.replace(/\\/g, '/');
+        return normalized.includes('/.cora/reports/') || normalized.includes('/.cora/reports');
     }
 
     /**
      * 生成 Milkdown 集成 HTML
      */
     private generateHtml(markdown: string, uri: vscode.Uri, webview: vscode.Webview): string {
-        if (this.containsHtmlBlock(markdown)) {
+        if (this.containsHtmlBlock(markdown) || this.isReportUri(uri)) {
             return this.generateMarkedOnlyHtml(markdown, uri, webview);
         }
         const extensionUri = this.context.extensionUri;
         const editorJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor.js'));
-        const mermaidJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js'));
         const bundleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'milkdown.bundle.js'));
-
-        const fontCascadiaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
-        const fontGoogleSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
-        const fontIBMPlexUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
-        const fontNotoSansUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+        const hasMermaid = this.containsMermaidBlock(markdown);
+        const mermaidJsUri = hasMermaid ? webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js')) : '';
 
         const nonce = this.getNonce();
 
@@ -440,18 +573,21 @@ export class PreviewProvider {
 
         let fontCss = '';
         let targetFontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-
         if (fontFamily === 'Cascadia Mono') {
-            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontCascadiaUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'CascadiaMono-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Cascadia Mono Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Cascadia Mono Custom', monospace";
         } else if (fontFamily === 'Google Sans') {
-            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontGoogleSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'GoogleSans-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Google Sans Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Google Sans Custom', sans-serif";
         } else if (fontFamily === 'IBM Plex Mono') {
-            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontIBMPlexUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'IBMPlexMono-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'IBM Plex Mono Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'IBM Plex Mono Custom', monospace";
         } else if (fontFamily === 'Noto Sans SC') {
-            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontNotoSansUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
+            const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'fonts', 'NotoSansSC-Regular.ttf'));
+            fontCss = `@font-face { font-family: 'Noto Sans SC Custom'; src: url(${fontUri}) format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
             targetFontFamily = "'Noto Sans SC Custom', sans-serif";
         }
 
@@ -461,7 +597,12 @@ export class PreviewProvider {
         const tabPreview = t('preview.tabPreview');
         const tabMarkdown = t('preview.tabMarkdown');
         const addToChatLabel = t('preview.addToChat');
-        const i18nMermaid = JSON.stringify({ mermaidError: t('preview.mermaidError'), mermaidLoading: t('preview.mermaidLoading') }).replace(/<\/script>/gi, '\\u003c/script>');
+        const i18nMermaid = JSON.stringify({
+            mermaidError: t('preview.mermaidError'),
+            mermaidLoading: t('preview.mermaidLoading'),
+            mermaidEngineFallback: t('preview.mermaidEngineFallback'),
+            mermaidLoadFailed: t('preview.mermaidLoadFailed')
+        }).replace(/<\/script>/gi, '\\u003c/script>');
 
         return `<!DOCTYPE html>
 <html lang="${htmlLang()}">
@@ -483,6 +624,8 @@ export class PreviewProvider {
             overflow: hidden; /* 核心修复：禁止 body 滚动 */
             -webkit-font-smoothing: antialiased;
         }
+        ::highlight(cora-find-hit) { background: var(--vscode-editor-findMatchHighlightBackground, rgba(86, 156, 214, 0.25)); }
+        ::highlight(cora-find-active) { background: var(--vscode-editor-findMatchBackground, rgba(86, 156, 214, 0.45)); }
         #editor {
             max-width: 860px;
             margin: 0 auto;
