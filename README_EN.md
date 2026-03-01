@@ -54,7 +54,7 @@ Cora gives Cursor / AI-assisted coding four capabilities so you and the AI work 
 | **Read** | Page tree, Outline | Better MD/Plan reading and navigation; clear structure when the AI references docs. |
 | **Find** | Full-text search | Quick file and snippet lookup; groundwork for “find by description” for the AI. |
 | **Understand** | CoraWiki (experimental) | Repo-wide code understanding and architecture reports; future MCP for deeper context. |
-| **Plan** | Plan writing constraints (experimental, optional) | Structured, checkable plans; AI reads constraints first for more consistent output. |
+| **Plan** | Plan writing constraints (experimental, optional) | Structured, checkable plans; tests and features developed in sync, each module requires unit + e2e tests, tasks updated only after tests pass; AI reads constraints first for more consistent output. |
 
 ## Product features
 
@@ -132,7 +132,7 @@ The **Search** panel supports **multiple keywords** (space-separated). Press Ent
 
 ### 8. Plan writing constraints (experimental, optional)
 
-**Plan enhancement** is an experimental feature. Cora provides **Plan writing constraints and templates** so you and the AI can write clear, checkable plans. In Cursor you can combine them with workspace rules so that “read constraints before writing a plan” is automatic, and AI-generated plans are more consistent and actionable. Later versions may add commands like “Open plan constraints” or “New plan from template”.
+**Plan enhancement** is an experimental feature. Cora provides **Plan writing constraints and templates** so you and the AI can write clear, checkable plans. The constraints require **tests and features to be developed in sync**; every module must have **unit tests and e2e tests**; **tasks may only be marked complete after all tests pass**—updating task status before tests pass is disallowed. In Cursor you can combine them with workspace rules so that “read constraints before writing a plan” is automatic, and AI-generated plans are more consistent and actionable. Later versions may add commands like “Open plan constraints” or “New plan from template”.
 
 ### 9. Favorites
 
@@ -271,7 +271,7 @@ Planned work, in rough priority order.
 
 * **CoraWiki** (experimental): Workspace architecture analysis is available; we keep improving report quality and multi-step research.
 
-* **Plan enhancement** (experimental): Plan writing constraints and templates as a product capability; we may add an “Open plan constraints” command or “New plan from template” later.
+* **Plan enhancement** (experimental): Plan writing constraints and templates as a product capability (tests and features in sync, unit + e2e per module, tasks updated only after tests pass); we may add an “Open plan constraints” command or “New plan from template” later.
 
 ### Basic
 

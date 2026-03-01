@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { t } from '../utils/i18n';
+import { getPlanProductIntro } from '../utils/planProductIntro';
 
 const CONSTRAINTS_FILE = '00-PLAN-CONSTRAINTS.md';
 
@@ -43,6 +44,11 @@ export class CoraPlanProvider implements vscode.TreeDataProvider<CoraPlanItem> {
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
     private items: CoraPlanItem[] = [];
+    private extensionUri: vscode.Uri;
+
+    constructor(extensionUri: vscode.Uri) {
+        this.extensionUri = extensionUri;
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -109,21 +115,28 @@ export class CoraPlanProvider implements vscode.TreeDataProvider<CoraPlanItem> {
             return [];
         }
         if (this.items.length === 0) {
-            const welcome = new CoraPlanItem(
-                t('coraPlan.welcomeIntro'),
-                'welcome',
-                vscode.TreeItemCollapsibleState.None,
-                {
-                    command: {
-                        command: 'knowledgeBase.installPlanConstraintsToWorkspace',
-                        title: t('coraPlan.welcomeButton'),
-                        arguments: []
-                    }
-                }
-            );
-            welcome.description = t('coraPlan.welcomeButton');
-            return [welcome];
+            return this.buildWelcomeItem();
         }
         return this.items;
+    }
+
+    private async buildWelcomeItem(): Promise<CoraPlanItem[]> {
+        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const intro =
+            (await getPlanProductIntro(this.extensionUri, workspacePath)) || t('coraPlan.welcomeIntro');
+        const welcome = new CoraPlanItem(
+            intro,
+            'welcome',
+            vscode.TreeItemCollapsibleState.None,
+            {
+                command: {
+                    command: 'knowledgeBase.installPlanConstraintsToWorkspace',
+                    title: t('coraPlan.welcomeButton'),
+                    arguments: []
+                }
+            }
+        );
+        welcome.description = t('coraPlan.welcomeButton');
+        return [welcome];
     }
 }

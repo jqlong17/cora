@@ -303,3 +303,16 @@ export async function openCoraWikiReference(reference: string): Promise<void> {
     }
 }
 
+const CORAWIKI_USAGE_FILENAME = 'corawiki-usage.md';
+
+export async function openCoraWikiUsage(extensionUri: vscode.Uri): Promise<void> {
+    const uri = vscode.Uri.joinPath(extensionUri, 'resources', CORAWIKI_USAGE_FILENAME);
+    try {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`${t('msg.openFailed')}: ${message}`);
+    }
+}
+

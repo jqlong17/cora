@@ -1,14 +1,12 @@
 # Changelog
 
-## \[0.2.0] - 2026-02-27
+## \[0.2.0] - 2026-03-01
 
-### Release notes
+### Added (experimental)
 
-* **Version bump to 0.2.0**: CoraWiki and Plan enhancement are now labeled as **experimental features** in the README; we will iterate based on feedback and may promote them to stable later.
+* **CoraWiki**: Uses AI to analyze the workspace directory and produce structured architecture reports. One-click “Start architecture analysis for current workspace”; file references in reports are clickable to jump to code. Supports OpenAI, Minimax, Kimi, OpenRouter; configure Provider, Model, and API key env in Settings. View includes a usage entry and empty-state intro.
 
-### Documentation
-
-* **Experimental feature labels**: README (CN/EN) now marks CoraWiki and Plan writing constraints as experimental; table, product feature sections, and Roadmap updated accordingly.
+* **CoraPlan**: Constrained Plan-writing methodology (DDD/TDD, completion criteria and acceptance up front) to reduce hallucination and human acceptance overhead via tests. “Set up CoraPlan in this workspace” injects constraints and templates into `.cursor/plans`; recommended to have AI generate and run plans from constraints in Agent mode. View offers open constraints, README registry, and usage entry; empty-state copy is read dynamically from the constraints doc.
 
 ## \[0.1.11] - 2026-02-26
 

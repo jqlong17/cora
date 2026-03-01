@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
     const searchProvider = new SearchProvider(fileService, configService);
     const coraWikiProvider = new CoraWikiProvider();
-    const coraPlanProvider = new CoraPlanProvider();
+    const coraPlanProvider = new CoraPlanProvider(context.extensionUri);
 
     // ── 3. 注册树视图 ──
     const pageTreeView = vscode.window.createTreeView('pageTree', {

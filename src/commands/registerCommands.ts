@@ -169,6 +169,9 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         vscode.commands.registerCommand('knowledgeBase.openCoraWikiReference', (reference: string) => {
             void commands.openCoraWikiReference(reference);
         }),
+        vscode.commands.registerCommand('knowledgeBase.openCoraWikiUsage', () => {
+            void commands.openCoraWikiUsage(context.extensionUri);
+        }),
 
         // ── CoraPlan ──
         vscode.commands.registerCommand('knowledgeBase.openPlanConstraints', () => {
@@ -179,6 +182,9 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         }),
         vscode.commands.registerCommand('knowledgeBase.installPlanConstraintsToWorkspace', () => {
             void commands.installPlanConstraintsToWorkspace(context.extensionUri);
+        }),
+        vscode.commands.registerCommand('knowledgeBase.openCoraPlanUsage', () => {
+            void commands.openCoraPlanUsage(context.extensionUri);
         }),
         vscode.commands.registerCommand('knowledgeBase.openCoraPlanPlan', (planPath: string) => {
             void commands.openCoraPlanPlan(planPath);

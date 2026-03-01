@@ -255,6 +255,11 @@
         "title": "%cmd.openCoraWikiReference%"
       },
       {
+        "command": "knowledgeBase.openCoraWikiUsage",
+        "title": "%cmd.openCoraWikiUsage%",
+        "icon": "$(info)"
+      },
+      {
         "command": "knowledgeBase.openPlanConstraints",
         "title": "%cmd.openPlanConstraints%",
         "icon": "$(checklist)"
@@ -268,6 +273,11 @@
         "command": "knowledgeBase.installPlanConstraintsToWorkspace",
         "title": "%cmd.installPlanConstraintsToWorkspace%",
         "icon": "$(file-add)"
+      },
+      {
+        "command": "knowledgeBase.openCoraPlanUsage",
+        "title": "%cmd.openCoraPlanUsage%",
+        "icon": "$(info)"
       },
       {
         "command": "knowledgeBase.openCoraPlanPlan",
@@ -364,6 +374,11 @@
           "group": "navigation@2"
         },
         {
+          "command": "knowledgeBase.openCoraWikiUsage",
+          "when": "view == coraWiki",
+          "group": "navigation@3"
+        },
+        {
           "command": "knowledgeBase.openPlanConstraints",
           "when": "view == coraPlan",
           "group": "navigation@1"
@@ -377,6 +392,11 @@
           "command": "knowledgeBase.installPlanConstraintsToWorkspace",
           "when": "view == coraPlan",
           "group": "navigation@3"
+        },
+        {
+          "command": "knowledgeBase.openCoraPlanUsage",
+          "when": "view == coraPlan",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -730,6 +750,7 @@
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
     "seed-test-workspace": "node scripts/seed-test-workspace.js",
+    "sync-plan": "node scripts/sync-plan-constraints.js",
     "publish:all": "./scripts/publish.sh"
   },
   "devDependencies": {

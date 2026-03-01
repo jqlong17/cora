@@ -1,4 +1,5 @@
 .vscode/**
+# .cursor/ 为本项目自用（plans 登记表、rules 等），不随 CoraPlan 产品打包
 .cursor/**
 .vscode-test/**
 src/**
