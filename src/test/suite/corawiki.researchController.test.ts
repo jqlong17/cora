@@ -455,6 +455,99 @@ suite('CoraWiki ResearchController Test Suite', () => {
         assert.strictEqual(count, 2, 'should count read_skeleton and read_full_code only');
     });
 
+    test('tryParseStructuredFinal extracts projectBackground and technicalOverview', () => {
+        const controller = new ResearchController();
+        const json = JSON.stringify({
+            status: 'ready',
+            plan: 'plan',
+            updates: ['u1'],
+            finalConclusion: 'conclusion',
+            references: ['src/a.ts'],
+            projectBackground: 'A VS Code extension for AI-driven code architecture analysis.',
+            technicalOverview: 'TypeScript + VS Code Extension API + OpenAI-compatible LLM providers.',
+            architectureFindings: [{ title: 'T', judgement: 'J', evidence: ['src/a.ts'] }],
+            criticalFlows: [{ name: 'F', steps: ['s1'], evidence: ['src/a.ts'] }],
+            risks: [{ risk: 'R', impact: 'I', evidence: ['src/a.ts'] }],
+            unknowns: ['U'],
+            diagrams: ['flowchart TD\nA-->B'],
+            moduleSummaries: ['mod1']
+        });
+        const parsed = (controller as any).tryParseStructuredFinal(json);
+        assert.ok(parsed, 'should parse valid JSON');
+        assert.strictEqual(parsed.projectBackground, 'A VS Code extension for AI-driven code architecture analysis.');
+        assert.strictEqual(parsed.technicalOverview, 'TypeScript + VS Code Extension API + OpenAI-compatible LLM providers.');
+        assert.strictEqual(parsed.status, 'ready');
+    });
+
+    test('ROOT_WHITELIST_PATTERNS matches expected root-level files', () => {
+        const { ROOT_WHITELIST_PATTERNS } = require('../../corawiki/researchController');
+        const shouldMatch = ['README.md', 'README_EN.md', 'readme.md', 'package.json', 'tsconfig.json', 'tsconfig.build.json', 'Dockerfile', 'Makefile', 'LICENSE', 'CHANGELOG.md', 'CHANGELOG_EN.md', '.env.example', 'pyproject.toml', 'Cargo.toml', 'go.mod'];
+        const shouldNotMatch = ['index.ts', 'app.py', 'main.js', 'random.txt', 'src/readme.md'];
+        for (const name of shouldMatch) {
+            assert.ok(ROOT_WHITELIST_PATTERNS.some((re: RegExp) => re.test(name)), `${name} should match whitelist`);
+        }
+        for (const name of shouldNotMatch) {
+            assert.ok(!ROOT_WHITELIST_PATTERNS.some((re: RegExp) => re.test(name)), `${name} should NOT match whitelist`);
+        }
+    });
+
+    test('injectRootWhitelistFiles populates discoveredFiles with README.md and package.json', async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'cora-wiki-whitelist-'));
+        await fs.writeFile(path.join(tempRoot, 'README.md'), '# Hello\n', 'utf8');
+        await fs.writeFile(path.join(tempRoot, 'package.json'), '{"name":"x"}\n', 'utf8');
+        await fs.writeFile(path.join(tempRoot, 'tsconfig.json'), '{}', 'utf8');
+        await fs.writeFile(path.join(tempRoot, 'random.txt'), 'data', 'utf8');
+        try {
+            const controller = new ResearchController();
+            const discoveredFiles = new Set<string>();
+            await (controller as any).injectRootWhitelistFiles(tempRoot, discoveredFiles);
+            assert.ok(discoveredFiles.has(path.join(tempRoot, 'README.md')), 'README.md should be whitelisted');
+            assert.ok(discoveredFiles.has(path.join(tempRoot, 'package.json')), 'package.json should be whitelisted');
+            assert.ok(discoveredFiles.has(path.join(tempRoot, 'tsconfig.json')), 'tsconfig.json should be whitelisted');
+            assert.ok(!discoveredFiles.has(path.join(tempRoot, 'random.txt')), 'random.txt should NOT be whitelisted');
+        } finally {
+            await fs.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('root whitelist files bypass path_guard in executeTool without prior list_dir', async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'cora-wiki-guard-wl-'));
+        const readmePath = path.join(tempRoot, 'README.md');
+        const pkgPath = path.join(tempRoot, 'package.json');
+        await fs.writeFile(readmePath, '# Project\nSome description.', 'utf8');
+        await fs.writeFile(pkgPath, '{"name":"test","version":"1.0.0"}', 'utf8');
+        try {
+            const controller = new ResearchController();
+            const discoveredFiles = new Set<string>();
+            const discoveredDirs = new Set<string>([tempRoot]);
+            await (controller as any).injectRootWhitelistFiles(tempRoot, discoveredFiles);
+
+            const readmeResult = await (controller as any).executeTool(
+                'read_full_code',
+                { filePath: readmePath },
+                tempRoot,
+                discoveredFiles,
+                discoveredDirs
+            );
+            assert.ok(!String(readmeResult.contextOutput).includes('path_guard_blocked'),
+                'README.md should NOT be blocked after whitelist injection');
+            assert.ok(readmeResult.evidence.length > 0, 'should return evidence for README.md');
+
+            const pkgResult = await (controller as any).executeTool(
+                'read_full_code',
+                { filePath: pkgPath },
+                tempRoot,
+                discoveredFiles,
+                discoveredDirs
+            );
+            assert.ok(!String(pkgResult.contextOutput).includes('path_guard_blocked'),
+                'package.json should NOT be blocked after whitelist injection');
+            assert.ok(pkgResult.evidence.length > 0, 'should return evidence for package.json');
+        } finally {
+            await fs.rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
     test('executeTool when onPythonError returns skip then next Python tool returns python_tool_skipped', async () => {
         const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'cora-wiki-py-skip-'));
         try {

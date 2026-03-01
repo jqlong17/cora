@@ -7,7 +7,7 @@ import { FileService } from '../../services/fileService';
 import { ConfigService } from '../../services/configService';
 import { FavoritesService } from '../../services/favoritesService';
 import { PageTreeProvider } from '../../providers/pageTreeProvider';
-import { SearchProvider, SearchItem } from '../../providers/searchProvider';
+import { SearchProvider } from '../../providers/searchProvider';
 import { OutlineProvider, OutlineItem } from '../../providers/outlineProvider';
 import { OutlineService } from '../../services/outlineService';
 
@@ -86,7 +86,7 @@ suite('Cora E2E Test Suite', () => {
         };
         favoritesService = new FavoritesService(mockMemento);
         pageTreeProvider = new PageTreeProvider(fileService, configService, favoritesService);
-        searchProvider = new SearchProvider(fileService, configService);
+        searchProvider = new SearchProvider(configService);
         outlineService = new OutlineService();
         outlineProvider = new OutlineProvider(outlineService, configService);
 
@@ -140,8 +140,7 @@ suite('Cora E2E Test Suite', () => {
                 'knowledgeBase.revealInFinder',
                 'knowledgeBase.copyPath',
                 'knowledgeBase.copyRelativePath',
-                'knowledgeBase.searchNotes',
-                'knowledgeBase.clearSearch'
+                'knowledgeBase.searchNotes'
             ];
 
             for (const cmd of expectedCommands) {
@@ -646,59 +645,39 @@ suite('Cora E2E Test Suite', () => {
 
     suite('Search Functionality', () => {
         test('should search single keyword', async function() {
-            // 在测试环境中可能没有打开工作区
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders || workspaceFolders.length === 0) {
                 this.skip();
                 return;
             }
 
-            await searchProvider.search('项目计划');
-            const results = await searchProvider.getChildren();
+            const results = await searchProvider.search('项目计划');
 
-            // 搜索功能依赖于实际文件系统，可能没有结果也是正常的
             console.log('Search results count:', results.length);
             assert.ok(Array.isArray(results), 'Results should be an array');
         });
 
         test('should search multiple keywords (AND logic)', async () => {
-            // 搜索包含"项目"和"需求"的文件
-            await searchProvider.search('项目 需求');
-            const results = await searchProvider.getChildren();
+            const results = await searchProvider.search('项目 需求');
 
-            // 结果应该同时包含这两个关键词
             for (const result of results) {
-                const content = fs.readFileSync(result.result.uri.fsPath, 'utf8');
+                const content = fs.readFileSync(result.uri.fsPath, 'utf8');
                 assert.ok(content.includes('项目') && content.includes('需求'),
                     'Result should contain both keywords');
             }
         });
 
         test('should sort results by match count', async () => {
-            await searchProvider.search('模式');
-            const results = await searchProvider.getChildren();
+            const results = await searchProvider.search('模式');
 
             if (results.length >= 2) {
-                // 验证按匹配次数降序排列
                 for (let i = 0; i < results.length - 1; i++) {
-                    assert.ok(results[i].result.matchCount >= results[i + 1].result.matchCount,
-                        'Results should be sorted by match count descending');
+                    if (results[i].titleMatch === results[i + 1].titleMatch) {
+                        assert.ok(results[i].matchCount >= results[i + 1].matchCount,
+                            'Results in the same title-match group should be sorted by match count descending');
+                    }
                 }
             }
-        });
-
-        test('should clear search results', async () => {
-            // 先搜索（即使搜索失败也能测试清除功能）
-            try {
-                await searchProvider.search('项目');
-            } catch (e) {
-                console.log('Search may have failed:', e);
-            }
-
-            // 可能有结果也可能没有，清除后应该为空
-            searchProvider.clear();
-            const results = await searchProvider.getChildren();
-            assert.strictEqual(results.length, 0, 'Search results should be cleared');
         });
 
         test('should get last query', async () => {
@@ -709,18 +688,15 @@ suite('Cora E2E Test Suite', () => {
         });
 
         test('should handle empty search', async () => {
-            await searchProvider.search('');
-            const results = await searchProvider.getChildren();
-            // 空搜索时应该返回空数组
+            const results = await searchProvider.search('');
             assert.strictEqual(results.length, 0, 'Empty search should return empty array');
         });
 
         test('should generate preview for search results', async () => {
-            await searchProvider.search('TypeScript');
-            const results = await searchProvider.getChildren();
+            const results = await searchProvider.search('TypeScript');
 
             if (results.length > 0) {
-                const preview = results[0].result.preview;
+                const preview = results[0].preview;
                 assert.ok(preview.length > 0, 'Should have preview text');
                 assert.ok(preview.length <= 53, 'Preview should be truncated with ellipsis if too long');
             }

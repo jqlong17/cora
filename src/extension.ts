@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
             );
         }
     );
-    const searchProvider = new SearchProvider(fileService, configService);
+    const searchProvider = new SearchProvider(configService);
     const coraWikiProvider = new CoraWikiProvider();
     const coraPlanProvider = new CoraPlanProvider(context.extensionUri);
 
@@ -47,11 +47,6 @@ export function activate(context: vscode.ExtensionContext) {
     pageTreeProvider.setTreeView(pageTreeView);
     const outlineTreeView = vscode.window.createTreeView('kbOutline', {
         treeDataProvider: outlineProvider,
-        showCollapseAll: false,
-        canSelectMany: false
-    });
-    const searchTreeView = vscode.window.createTreeView('search', {
-        treeDataProvider: searchProvider,
         showCollapseAll: false,
         canSelectMany: false
     });
@@ -70,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     outlineProvider.setTreeView(outlineTreeView);
 
-    context.subscriptions.push(pageTreeView, outlineTreeView, searchTreeView, coraWikiTreeView, coraPlanTreeView);
+    context.subscriptions.push(pageTreeView, outlineTreeView, coraWikiTreeView, coraPlanTreeView);
 
     // ── 4. 构建服务容器 & 注册命令 / 监听器 ──
     const container: ServiceContainer = {

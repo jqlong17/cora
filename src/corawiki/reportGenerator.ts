@@ -210,13 +210,12 @@ export function renderMarkdownReport(result: ResearchResult, workspacePath?: str
     }
     lines.push('');
 
-    // 1. What is — 项目是啥、主要核心功能点
+    // 1. What is — project background, goals, audience (from LLM's projectBackground or fallback)
     lines.push(`## What is ${systemName}?`);
     lines.push('');
-    lines.push(
-        `${systemName} 是本次被分析的目标系统。当前报告围绕其关键代码路径展开，` +
-        `基于 ${relevantFiles.length} 个核心源码文件形成结构化结论。`
-    );
+    const whatIsText = result.projectBackground
+        || (result.finalConclusion ? result.finalConclusion.slice(0, 400) : `${systemName} is the target system analyzed in this report.`);
+    lines.push(whatIsText);
     if (moduleSummaries.length > 0) {
         lines.push('');
         lines.push('主要功能与模块概览：');
@@ -226,12 +225,11 @@ export function renderMarkdownReport(result: ResearchResult, workspacePath?: str
     }
     lines.push('');
 
-    // 2. Overview — Purpose and Scope（简要，避免与总结重复）
-    const overviewMaxLen = 200;
-    const overviewText = result.finalConclusion
-        ? (result.finalConclusion.slice(0, overviewMaxLen).trim() +
-            (result.finalConclusion.length > overviewMaxLen ? '…' : ''))
-        : '(empty)';
+    // 2. Overview — technical architecture, tech stack, capability boundaries
+    const overviewText = result.technicalOverview
+        || (result.finalConclusion
+            ? (result.finalConclusion.slice(0, 200).trim() + (result.finalConclusion.length > 200 ? '…' : ''))
+            : '(empty)');
     lines.push('## Overview');
     lines.push('');
     lines.push(overviewText);
@@ -337,24 +335,25 @@ export function renderMarkdownReport(result: ResearchResult, workspacePath?: str
     }
     lines.push('');
 
-    // 7. 总结
-    lines.push('## 总结');
-    lines.push('');
-    lines.push(result.finalConclusion ? result.finalConclusion.slice(0, 800) : '(empty)');
+    // 7. Risks & Unknowns
     if (risks.length > 0 || unknowns.length > 0) {
+        lines.push('## Risks & Unknowns');
         lines.push('');
         if (risks.length > 0) {
-            for (const r of risks.slice(0, 3)) {
-                lines.push(`- 风险: ${r.risk}（${r.impact}）`);
+            for (const r of risks.slice(0, 5)) {
+                lines.push(`- **风险**: ${r.risk}（${r.impact}）`);
+                for (const ev of r.evidence.slice(0, 2)) {
+                    lines.push(`  - ${ev}`);
+                }
             }
         }
         if (unknowns.length > 0) {
-            for (const u of unknowns.slice(0, 3)) {
-                lines.push(`- 待澄清: ${u}`);
+            for (const u of unknowns.slice(0, 5)) {
+                lines.push(`- **待澄清**: ${u}`);
             }
         }
+        lines.push('');
     }
-    lines.push('');
     lines.push('---');
     lines.push('分析报告产出来自于 Cora');
     lines.push('');

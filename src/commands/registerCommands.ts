@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { PageTreeProvider, PageTreeItem } from '../providers/pageTreeProvider';
 import { OutlineProvider } from '../providers/outlineProvider';
 import { PreviewProvider } from '../providers/previewProvider';
@@ -137,19 +138,40 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
             commands.copyRelativePath(item, view);
         }),
 
-        // ── 搜索 ──
+        // ── 搜索（QuickPick） ──
         vscode.commands.registerCommand('knowledgeBase.searchNotes', async () => {
             const query = await vscode.window.showInputBox({
                 prompt: t('search.prompt'),
                 placeHolder: t('search.placeHolder'),
                 value: c.searchProvider.getLastQuery()
             });
-            if (query) {
-                await c.searchProvider.search(query);
+            if (!query) return;
+
+            const results = await c.searchProvider.search(query);
+            if (results.length === 0) {
+                vscode.window.showInformationMessage(t('search.noResults'));
+                return;
             }
-        }),
-        vscode.commands.registerCommand('knowledgeBase.clearSearch', () => {
-            c.searchProvider.clear();
+
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+            const picks = results.map(r => ({
+                label: `$(file) ${r.fileName}`,
+                description: t('search.matches', { n: r.matchCount }),
+                detail: r.preview
+                    ? (workspaceRoot ? path.relative(workspaceRoot, r.uri.fsPath) : r.uri.fsPath) + '  —  ' + r.preview
+                    : (workspaceRoot ? path.relative(workspaceRoot, r.uri.fsPath) : r.uri.fsPath),
+                result: r
+            }));
+
+            const selected = await vscode.window.showQuickPick(picks, {
+                placeHolder: t('search.resultsTitle', { n: results.length, query }),
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (selected) {
+                await vscode.commands.executeCommand('knowledgeBase.openPreview', selected.result.uri, selected.result.firstMatchLine);
+            }
         }),
         vscode.commands.registerCommand('knowledgeBase.startCoraWikiResearch', () => {
             void commands.startCoraWikiResearch(c.coraWikiProvider, c.configService, undefined, context.extensionPath);

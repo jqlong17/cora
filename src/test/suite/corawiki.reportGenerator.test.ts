@@ -66,7 +66,8 @@ suite('CoraWiki reportGenerator Test Suite', () => {
         assert.ok(md.includes('## Core Components'));
         assert.ok(md.includes('## Data Flow'));
         assert.ok(md.includes('## Key File Structure'));
-        assert.ok(md.includes('## 总结'));
+        assert.ok(md.includes('## Risks & Unknowns'));
+        assert.ok(!md.includes('## 总结'), 'should NOT contain legacy 总结 section');
         assert.ok(md.includes('Token Usage: prompt=100, completion=20, total=120, cached=40'));
         assert.ok(md.includes('```mermaid'));
         assert.ok(md.includes('分析报告产出来自于 Cora'));
@@ -102,29 +103,52 @@ suite('CoraWiki reportGenerator Test Suite', () => {
         assert.strictEqual(actualSignature, expectedSignature);
     });
 
-    test('Overview section is brief and not identical to 总结', () => {
+    test('What is uses projectBackground, Overview uses technicalOverview', () => {
+        const resultWithNewFields: ResearchResult = {
+            ...sampleResult,
+            projectBackground: 'A platform for managing e-commerce orders end-to-end.',
+            technicalOverview: 'TypeScript monorepo with Express backend and React frontend.'
+        };
+        const md = renderMarkdownReport(resultWithNewFields, '/tmp/ws');
+        assert.ok(md.includes('A platform for managing e-commerce orders end-to-end.'),
+            'What is should contain projectBackground');
+        assert.ok(md.includes('TypeScript monorepo with Express backend and React frontend.'),
+            'Overview should contain technicalOverview');
+        assert.ok(!md.includes('是本次被分析的目标系统'),
+            'should NOT contain legacy hardcoded What is text');
+    });
+
+    test('What is falls back to finalConclusion when projectBackground is absent', () => {
+        const resultWithoutBackground: ResearchResult = {
+            ...sampleResult,
+            projectBackground: undefined,
+            technicalOverview: undefined
+        };
+        const md = renderMarkdownReport(resultWithoutBackground, '/tmp/ws');
+        const sections = md.split(/\n## /);
+        const whatIsBlock = sections.find(s => s.startsWith('What is'));
+        assert.ok(whatIsBlock, 'What is section should exist');
+        assert.ok(whatIsBlock!.includes('订单从 controller'), 'should fall back to finalConclusion');
+    });
+
+    test('Overview truncates finalConclusion when technicalOverview is absent', () => {
         const longConclusion =
             '订单从 controller 到 repository 完成落库。' +
             '建议引入应用服务层以解耦。风险包括事务边界不清晰。'.repeat(20);
-        const resultWithLongConclusion: ResearchResult = {
+        const resultNoOverview: ResearchResult = {
             ...sampleResult,
+            technicalOverview: undefined,
             finalConclusion: longConclusion
         };
-        const md = renderMarkdownReport(resultWithLongConclusion, '/tmp/ws');
+        const md = renderMarkdownReport(resultNoOverview, '/tmp/ws');
         const sections = md.split(/\n## /);
         const overviewBlock = sections.find(s => s.startsWith('Overview'));
-        const summaryBlock = sections.find(s => s.startsWith('总结'));
         const overviewBody = overviewBlock
             ? overviewBlock.replace(/^Overview\s*\n+/, '').split(/\n## /)[0].trim()
             : '';
-        const summaryBody = summaryBlock
-            ? summaryBlock.replace(/^总结\s*\n+/, '').split(/\n## /)[0].trim()
-            : '';
-        assert.ok(overviewBody.length <= summaryBody.length, 'Overview should not be longer than 总结');
-        assert.notStrictEqual(overviewBody, summaryBody, 'Overview and 总结 should not be identical');
         assert.ok(
             overviewBody.endsWith('…') || overviewBody.length <= 201,
-            'Overview should be truncated with … when conclusion is long'
+            'Overview should be truncated with … when technicalOverview is absent and conclusion is long'
         );
     });
 });

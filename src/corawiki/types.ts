@@ -31,6 +31,10 @@ export interface ResearchResult {
     updates: string[];
     finalConclusion: string;
     references: string[];
+    /** High-level project background: goals, audience, core value (from README / package.json). */
+    projectBackground?: string;
+    /** Macro technical overview: architecture choices, tech stack, capability boundaries. */
+    technicalOverview?: string;
     debugLogPath?: string;
     tokenUsage?: {
         promptTokens: number;

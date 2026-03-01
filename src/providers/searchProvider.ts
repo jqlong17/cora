@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 import { isMarkdownFile } from '../utils/markdownParser';
 import { t } from '../utils/i18n';
@@ -12,97 +11,42 @@ export interface SearchResult {
     matchCount: number;
     preview: string;
     firstMatchLine?: number;
+    titleMatch: boolean;
 }
 
-export class SearchItem extends vscode.TreeItem {
-    constructor(
-        public readonly result: SearchResult
-    ) {
-        super(result.fileName, vscode.TreeItemCollapsibleState.None);
-
-        this.tooltip = `${result.fileName}\n${t('search.matchCount')}: ${result.matchCount}\n${result.preview}`;
-        this.description = t('search.matches', { n: result.matchCount });
-        this.iconPath = new vscode.ThemeIcon('file');
-
-        this.command = {
-            command: 'knowledgeBase.openPreview',
-            title: t('common.openPreview'),
-            arguments: [result.uri, result.firstMatchLine]
-        };
-    }
-}
-
-export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<SearchItem | undefined | null | void> = new vscode.EventEmitter<SearchItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<SearchItem | undefined | null | void> = this._onDidChangeTreeData.event;
-
-    private searchResults: SearchResult[] = [];
+export class SearchProvider {
     private lastQuery: string = '';
-    private isFallbackMode: boolean = false;
 
     constructor(
-        private fileService: FileService,
         private configService: ConfigService
     ) { }
 
-    refresh(): void {
-        this._onDidChangeTreeData.fire();
-    }
-
-    clear(): void {
-        this.searchResults = [];
-        this.lastQuery = '';
-        this.isFallbackMode = false;
-        this.refresh();
-    }
-
-    getTreeItem(element: SearchItem): vscode.TreeItem {
-        return element;
-    }
-
-    async getChildren(): Promise<SearchItem[]> {
-        // 只返回搜索结果，搜索和清除功能在标题栏
-        return this.searchResults.map(result => new SearchItem(result));
-    }
-
-    async search(query: string): Promise<void> {
+    async search(query: string): Promise<SearchResult[]> {
         if (!query.trim()) {
-            this.clear();
-            return;
+            this.lastQuery = '';
+            return [];
         }
 
         this.lastQuery = query.trim();
         const keywords = this.lastQuery.split(/\s+/).filter(k => k.length > 0);
 
         if (keywords.length === 0) {
-            this.clear();
-            return;
+            return [];
         }
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
             vscode.window.showWarningMessage(t('msg.noWorkspace'));
-            return;
+            return [];
         }
 
         const results = await this.performSearch(workspaceFolders[0].uri.fsPath, keywords);
 
-        // 如果没有结果且是多关键词搜索，尝试降级为 OR 搜索
         if (results.length === 0 && keywords.length > 1) {
-            const fallbackResults = await this.performOrSearch(workspaceFolders[0].uri.fsPath, keywords);
-            if (fallbackResults.length > 0) {
-                this.isFallbackMode = true;
-                this.searchResults = fallbackResults;
-            } else {
-                this.isFallbackMode = false;
-                this.searchResults = [];
-            }
-        } else {
-            this.isFallbackMode = false;
-            this.searchResults = results;
+            return this.performOrSearch(workspaceFolders[0].uri.fsPath, keywords);
         }
 
-        this.refresh();
+        return results;
     }
 
     private async performSearch(rootPath: string, keywords: string[]): Promise<SearchResult[]> {
@@ -116,7 +60,6 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
                 const content = await fs.promises.readFile(filePath, 'utf8');
                 const lowerContent = content.toLowerCase();
 
-                // 检查是否包含所有关键词（AND 逻辑）
                 const allMatch = keywords.every(keyword =>
                     lowerContent.includes(keyword.toLowerCase())
                 );
@@ -124,13 +67,15 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
                 if (allMatch) {
                     const matchCount = this.countMatches(content, keywords);
                     const { preview, line } = this.generatePreviewAndLine(content, keywords);
+                    const titleMatch = this.isTitleMatch(filePath, keywords);
 
                     results.push({
                         uri: vscode.Uri.file(filePath),
                         fileName: path.basename(filePath),
                         matchCount,
                         preview,
-                        firstMatchLine: line
+                        firstMatchLine: line,
+                        titleMatch
                     });
                 }
             } catch (error) {
@@ -138,8 +83,10 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
             }
         }
 
-        // 按匹配次数排序
-        return results.sort((a, b) => b.matchCount - a.matchCount);
+        return results.sort((a, b) => {
+            if (a.titleMatch !== b.titleMatch) return a.titleMatch ? -1 : 1;
+            return b.matchCount - a.matchCount;
+        });
     }
 
     private async performOrSearch(rootPath: string, keywords: string[]): Promise<SearchResult[]> {
@@ -153,7 +100,6 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
                 const content = await fs.promises.readFile(filePath, 'utf8');
                 const lowerContent = content.toLowerCase();
 
-                // 检查是否包含任一关键词（OR 逻辑）
                 const anyMatch = keywords.some(keyword =>
                     lowerContent.includes(keyword.toLowerCase())
                 );
@@ -161,13 +107,15 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
                 if (anyMatch) {
                     const matchCount = this.countMatches(content, keywords);
                     const { preview, line } = this.generatePreviewAndLine(content, keywords);
+                    const titleMatch = this.isTitleMatch(filePath, keywords);
 
                     results.push({
                         uri: vscode.Uri.file(filePath),
                         fileName: path.basename(filePath),
                         matchCount,
                         preview,
-                        firstMatchLine: line
+                        firstMatchLine: line,
+                        titleMatch
                     });
                 }
             } catch (error) {
@@ -175,7 +123,10 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
             }
         }
 
-        return results.sort((a, b) => b.matchCount - a.matchCount);
+        return results.sort((a, b) => {
+            if (a.titleMatch !== b.titleMatch) return a.titleMatch ? -1 : 1;
+            return b.matchCount - a.matchCount;
+        });
     }
 
     private async getAllMarkdownFiles(dir: string, extensions: string[]): Promise<string[]> {
@@ -187,17 +138,14 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
         for (const entry of entries) {
             const fullPath = path.join(dir, entry.name);
 
-            // 始终跳过 .git
             if (entry.isDirectory() && entry.name === '.git') {
                 continue;
             }
 
-            // 按配置决定是否跳过隐藏文件和目录
             if (!showHiddenFiles && entry.name.startsWith('.')) {
                 continue;
             }
 
-            // 跳过 node_modules 和 out 等常见构建目录
             if (entry.name === 'node_modules' || entry.name === 'out' || entry.name === 'dist') {
                 continue;
             }
@@ -211,6 +159,11 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
         }
 
         return files;
+    }
+
+    private isTitleMatch(filePath: string, keywords: string[]): boolean {
+        const nameWithoutExt = path.basename(filePath, path.extname(filePath)).toLowerCase();
+        return keywords.some(k => nameWithoutExt.includes(k.toLowerCase()));
     }
 
     private countMatches(content: string, keywords: string[]): number {
@@ -239,7 +192,6 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
             );
 
             if (hasMatch && line.trim().length > 0) {
-                // 截取前 50 个字符作为预览
                 const preview = line.trim().substring(0, 50) + (line.length > 50 ? '...' : '');
                 return { preview, line: i };
             }
@@ -250,9 +202,5 @@ export class SearchProvider implements vscode.TreeDataProvider<SearchItem> {
 
     getLastQuery(): string {
         return this.lastQuery;
-    }
-
-    isFallback(): boolean {
-        return this.isFallbackMode;
     }
 }

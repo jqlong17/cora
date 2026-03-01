@@ -52,6 +52,8 @@ const zh: Messages = {
         cleared: '搜索结果已清空',
         matchCount: '匹配次数',
         matches: '{n} 处匹配',
+        noResults: '未找到匹配结果',
+        resultsTitle: '共 {n} 个结果 — "{query}"',
     },
     coraWiki: {
         emptyHint: '点击标题栏按钮开始 CoraWiki 研究',
@@ -215,6 +217,8 @@ const en: Messages = {
         cleared: 'Search results cleared',
         matchCount: 'Match count',
         matches: '{n} match(es)',
+        noResults: 'No matching results found',
+        resultsTitle: '{n} result(s) — "{query}"',
     },
     coraWiki: {
         emptyHint: 'Use the title action to start CoraWiki research',

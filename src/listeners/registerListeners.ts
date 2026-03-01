@@ -106,11 +106,26 @@ export function registerListeners(context: vscode.ExtensionContext, c: ServiceCo
     );
 
     // ── 文件系统变化 → 刷新页面树 ──
+    // workspace 事件覆盖 VS Code 内部操作（资源管理器、WorkspaceEdit 等）
     context.subscriptions.push(
         vscode.workspace.onDidCreateFiles(() => c.pageTreeProvider.refresh()),
         vscode.workspace.onDidDeleteFiles(() => c.pageTreeProvider.refresh()),
         vscode.workspace.onDidRenameFiles(() => c.pageTreeProvider.refresh())
     );
+
+    // FileSystemWatcher 覆盖外部来源的文件变化（终端、git、外部程序等）
+    let pageTreeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const debouncedPageTreeRefresh = (): void => {
+        if (pageTreeRefreshTimer) clearTimeout(pageTreeRefreshTimer);
+        pageTreeRefreshTimer = setTimeout(() => {
+            pageTreeRefreshTimer = undefined;
+            c.pageTreeProvider.refresh();
+        }, 300);
+    };
+    const pageTreeWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+    pageTreeWatcher.onDidCreate(debouncedPageTreeRefresh);
+    pageTreeWatcher.onDidDelete(debouncedPageTreeRefresh);
+    context.subscriptions.push(pageTreeWatcher);
 
     // ── 窗口焦点恢复 ──
     context.subscriptions.push(

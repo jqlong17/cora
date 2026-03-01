@@ -76,6 +76,21 @@ function extractReasoningFromMessage(msg: any): string | undefined {
 export const CORAWIKI_CANCELLED = 'CORAWIKI_CANCELLED';
 const CORAWIKI_PROMPT_VERSION = 'v2-evidence-priority';
 
+/** Root-level files that the LLM agent should always be able to read without prior list_dir discovery. */
+export const ROOT_WHITELIST_PATTERNS: RegExp[] = [
+    /^readme([._-][a-z_-]+)?\.md$/i,
+    /^package\.json$/i,
+    /^tsconfig([._-][a-z_-]+)?\.json$/i,
+    /^dockerfile$/i,
+    /^makefile$/i,
+    /^license$/i,
+    /^changelog([._-][a-z_-]+)?\.md$/i,
+    /^\.env\.example$/i,
+    /^pyproject\.toml$/i,
+    /^cargo\.toml$/i,
+    /^go\.mod$/i,
+];
+
 type ReferenceStats = {
     p0: number;
     p1: number;
@@ -243,6 +258,8 @@ export class ResearchController {
         const references = new Set<string>();
         let plan = '';
         let finalConclusion = '';
+        let projectBackground = '';
+        let technicalOverview = '';
         const diagrams: string[] = [];
         const moduleSummaries: string[] = [];
         const architectureFindings: Array<{ title: string; judgement: string; evidence: string[] }> = [];
@@ -251,6 +268,7 @@ export class ResearchController {
         const unknowns: string[] = [];
         const discoveredFiles = new Set<string>();
         const discoveredDirs = new Set<string>([workspacePath]);
+        await this.injectRootWhitelistFiles(workspacePath, discoveredFiles);
         const tokenUsage = {
             promptTokens: 0,
             completionTokens: 0,
@@ -403,16 +421,34 @@ export class ResearchController {
                 content:
                     '你是 CoraWiki 的代码架构研究 Agent（promptVersion=v2-evidence-priority）。' +
                     '可用工具：list_dir, read_skeleton, read_full_code, discover_entrypoints, analyze_dependencies, summarize_directory' +
-                    (this.enablePythonTooling ? ', extract_import_graph, analyze_complexity（Python 工具）' : '') + '。' +
+                    (this.enablePythonTooling ? ', extract_import_graph, analyze_complexity（Python 工具）' : '') + '。\n' +
+                    '【效率要求——极其重要】你只有 10 轮工具调用机会，每轮可以**并行调用多个工具**（在同一轮返回多个 tool_calls）。' +
+                    '为了最大化效率，你**必须**在每轮同时调用 3-5 个工具，而不是每轮只调 1-2 个。' +
+                    '例如第 1 轮应同时调用：read_full_code(README.md) + read_full_code(package.json) + discover_entrypoints(root) + summarize_directory(src)。' +
+                    '**禁止**在一轮中只调用 list_dir；list_dir 应与 read_skeleton/read_full_code **并行调用**。\n' +
+                    '【重要-前 2 轮必做】在前 2 轮内，你**必须**使用 read_full_code 读取根目录下的 README.md（或 README_EN.md）以及 package.json（已在白名单中，无需 list_dir 先发现）。' +
+                    '这两个文件提供项目的业务背景、目标受众与核心依赖信息，是 FINAL 中 projectBackground 和 technicalOverview 的主要来源。\n' +
                     '建议先用 discover_entrypoints 与 summarize_directory 建立项目概览，再读代码。' +
                     '你必须优先读取运行时代码证据，再输出结论。优先使用 read_skeleton，必要时才调用 read_full_code。' +
-                    '读取文件前必须先通过 list_dir 发现该文件路径，禁止猜测不存在路径。' +
+                    '读取文件前必须先通过 list_dir 发现该文件路径，禁止猜测不存在路径（根目录白名单文件除外：README*.md, package.json, tsconfig*.json 等）。\n' +
                     '证据分层与配额：P0=运行时代码(src/**, backend/app/**, frontend/src/**)；' +
                     'P1=配置/构建(package.json,Dockerfile,Makefile,*.config.*)；' +
                     'P2=文档/交付( docs/**, EP-*.md, *REPORT*, *SUMMARY* )。' +
                     'FINAL 目标：P0 占比>=60%，P2 占比<=20%。P2 不得作为核心架构结论唯一依据。' +
                     '每个判断必须附 evidence（文件路径或路径+行号）；证据不足时必须写 unknowns，禁止猜测。' +
-                    '必须覆盖：Overview、Module Responsibilities、Critical Flows、Key Config、Build Artifacts、Risks、Unknowns。' +
+                    '必须覆盖：Overview、Module Responsibilities、Critical Flows、Key Config、Build Artifacts、Risks、Unknowns。\n' +
+                    '【分析深度要求——极其重要】\n' +
+                    '你的报告面向的读者是技术决策者（Tech Lead / Architect），他们需要的不是代码文件的罗列，而是对项目的**高层洞察**。请务必做到以下几点：\n' +
+                    '1. **projectBackground**：不要简单重复 README 原文，要提炼出项目要解决的核心问题、目标用户、差异化价值主张。\n' +
+                    '2. **technicalOverview**：站在架构师视角，阐述技术选型的取舍（为什么选这个框架/库、对比什么方案）、整体分层策略、核心设计模式（如 MVC、Event-Driven、Plugin Architecture 等）。\n' +
+                    '3. **architectureFindings**：每条发现必须是一个可讨论的架构判断（如"前后端通过 REST 松耦合但缺乏消息队列缓冲"），不是简单罗列"项目使用了 React"。至少 5 条。\n' +
+                    '4. **criticalFlows**：选择最能体现系统设计复杂度的核心业务流程（如：用户登录鉴权链路、数据从前端到持久化的完整路径、核心调度/编排流程），每条至少 5 步。至少 2 条。\n' +
+                    '5. **moduleSummaries**：不要只写目录名，要写出每个模块的职责、它对外暴露的核心接口或能力、它与其他模块的依赖关系。\n' +
+                    '6. **risks**：必须是技术风险（如"单点故障"、"缺乏监控"、"无数据库 migration"），不是管理风险。\n' +
+                    '【热点模块深入】若预分析中提供了【热点模块扫描】信息，你**必须**对文件数排名前 5 的模块至少各执行 1 次 read_skeleton 或 summarize_directory。\n' +
+                    '【架构图要求】diagrams 字段**必须**基于你实际阅读的代码生成，反映真实的模块依赖、组件交互或数据流向。' +
+                    '**禁止**返回简单的 User→UI→API→Service→Data 万能分层图或自然语言文本。' +
+                    '至少提供 2 条 Mermaid 源码：(1) High-Level Component Architecture（标注实际模块名与依赖方向）(2) Core Business Flow（选一个关键业务流程画 sequence 或 flowchart）。\n' +
                     '若首轮 user 消息末尾包含【预分析】或【预分析-降级】，请优先基于该结果决定首轮动作：先调用 discover_entrypoints 或 summarize_directory 建立概览，再对关键文件使用 read_skeleton，不要仅用 list_dir 逐层展开。'
             },
             {
@@ -513,7 +549,7 @@ export class ResearchController {
                             if (r.filePath) discoveredFiles.add(r.filePath);
                         }
                     }
-                    for (const dir of ['backend/app', 'frontend/src', 'src']) {
+                    for (const dir of ['backend/app', 'backend', 'frontend/src', 'src']) {
                         const full = path.join(workspacePath, dir);
                         try {
                             const st = await fs.stat(full);
@@ -523,6 +559,30 @@ export class ResearchController {
                             }
                         } catch {
                             // directory does not exist, skip
+                        }
+                    }
+                    const hotspotResult = await this.scanHotspotModules(workspacePath);
+                    if (hotspotResult.summary) {
+                        parts.push(hotspotResult.summary);
+                    }
+                    if (hotspotResult.indexFiles.length > 0) {
+                        const skeletonResults: string[] = [];
+                        for (const idxFile of hotspotResult.indexFiles.slice(0, 5)) {
+                            try {
+                                const skeleton = await readSkeleton(idxFile);
+                                discoveredFiles.add(idxFile);
+                                discoveredDirs.add(path.dirname(idxFile));
+                                this.autoDiscoverImportedFiles(skeleton.imports, idxFile, workspacePath, discoveredFiles, discoveredDirs);
+                                const relPath = path.relative(workspacePath, idxFile);
+                                const imports = skeleton.imports.slice(0, 15);
+                                const symbols = skeleton.symbols.slice(0, 20);
+                                skeletonResults.push(
+                                    `  ${relPath}: imports(${skeleton.imports.length})=[${imports.join(', ')}] symbols(${skeleton.symbols.length})=[${symbols.join(', ')}]`
+                                );
+                            } catch { /* skip unreadable */ }
+                        }
+                        if (skeletonResults.length > 0) {
+                            parts.push(`【热点模块预读】已自动对 ${skeletonResults.length} 个热点模块入口执行 read_skeleton：\n${skeletonResults.join('\n')}\n你不需要再对这些文件执行 read_skeleton，应直接深入其 imports 中的关键文件。`);
                         }
                     }
                     const suggestPaths = toRun.filter(p =>
@@ -545,7 +605,29 @@ export class ResearchController {
             const entries = await discoverEntrypoints(workspacePath);
             const entryPaths = entries.slice(0, 10).map(e => e.filePath).join(', ') + (entries.length > 10 ? '...' : '');
             const fallback = `\n【预分析-降级】项目根目录: files=${rootSummary.fileCount}, dirs=${rootSummary.dirCount}, codeFiles=${rootSummary.codeFiles}；入口文件: ${entryPaths}`;
-            messages[1].content = messages[1].content + fallback;
+            const hotspotResult = await this.scanHotspotModules(workspacePath);
+            let hotspotText = hotspotResult.summary ? '\n' + hotspotResult.summary : '';
+            if (hotspotResult.indexFiles.length > 0) {
+                const skeletonResults: string[] = [];
+                for (const idxFile of hotspotResult.indexFiles.slice(0, 5)) {
+                    try {
+                        const skeleton = await readSkeleton(idxFile);
+                        discoveredFiles.add(idxFile);
+                        discoveredDirs.add(path.dirname(idxFile));
+                        this.autoDiscoverImportedFiles(skeleton.imports, idxFile, workspacePath, discoveredFiles, discoveredDirs);
+                        const relPath = path.relative(workspacePath, idxFile);
+                        const imports = skeleton.imports.slice(0, 15);
+                        const symbols = skeleton.symbols.slice(0, 20);
+                        skeletonResults.push(
+                            `  ${relPath}: imports(${skeleton.imports.length})=[${imports.join(', ')}] symbols(${skeleton.symbols.length})=[${symbols.join(', ')}]`
+                        );
+                    } catch { /* skip */ }
+                }
+                if (skeletonResults.length > 0) {
+                    hotspotText += `\n【热点模块预读】已自动对 ${skeletonResults.length} 个热点模块入口执行 read_skeleton：\n${skeletonResults.join('\n')}\n你不需要再对这些文件执行 read_skeleton，应直接深入其 imports 中的关键文件。`;
+                }
+            }
+            messages[1].content = messages[1].content + fallback + hotspotText;
             prerunIncluded = true;
         }
 
@@ -553,9 +635,15 @@ export class ResearchController {
         let finalRetryCount = 0;
         let lastRoundToolNames: string[] = [];
         let remediationRounds = 0;
+        let consecutiveListDirRounds = 0;
+        const alreadyReadFiles = new Set<string>();
         for (let iteration = 1; iteration <= this.maxSteps; iteration++) {
             this.throwIfAborted();
             this.emitProgress(`第 ${iteration}/${this.maxSteps} 轮：正在决策下一步`);
+            let iterationTools = tools;
+            if (consecutiveListDirRounds >= 2 && iteration >= 3) {
+                iterationTools = tools.filter(t => t.function.name !== 'list_dir');
+            }
             const contextMessages = this.buildContextMessages(
                 messages,
                 updates,
@@ -564,20 +652,21 @@ export class ResearchController {
                 this.maxSteps,
                 tokenUsage.totalTokens,
                 this.maxTotalTokens,
-                tools,
-                lastRoundToolNames
+                iterationTools,
+                lastRoundToolNames,
+                alreadyReadFiles.size
             );
             apiRequestCount += 1;
             await this.tryLog(logger, 'api_request', {
                 iteration,
                 model: this.llmConfig!.model,
                 messages: this.safeForLog(contextMessages),
-                tools: this.safeForLog(tools)
+                tools: this.safeForLog(iterationTools)
             });
             const response = await chatWithTools(llm, {
                 model: this.llmConfig!.model,
                 messages: contextMessages,
-                tools
+                tools: iterationTools
             }, this.llmConfig);
             await this.tryLog(logger, 'api_response', {
                 iteration,
@@ -638,7 +727,8 @@ export class ResearchController {
                         args,
                         workspacePath,
                         discoveredFiles,
-                        discoveredDirs
+                        discoveredDirs,
+                        alreadyReadFiles
                     );
                     return { call, fnName, args, result };
                 });
@@ -678,10 +768,13 @@ export class ResearchController {
                     });
                 }
                 lastRoundToolNames = toolResults.map(r => r.fnName);
+                const allListDir = lastRoundToolNames.length > 0 && lastRoundToolNames.every(n => n === 'list_dir');
+                consecutiveListDirRounds = allListDir ? consecutiveListDirRounds + 1 : 0;
                 continue;
             }
 
             lastRoundToolNames = [];
+            consecutiveListDirRounds = 0;
 
             const text = (msg.content ?? '').toString().trim();
             if (!text) {
@@ -717,6 +810,8 @@ export class ResearchController {
                     plan = structured.plan || plan;
                     updates.splice(0, updates.length, ...(structured.updates || updates));
                     finalConclusion = structured.finalConclusion || text;
+                    if (structured.projectBackground) { projectBackground = structured.projectBackground; }
+                    if (structured.technicalOverview) { technicalOverview = structured.technicalOverview; }
                     (structured.references || []).forEach(ref => references.add(ref));
                     this.normalizeMermaidDiagrams(structured.diagrams || []).forEach(item => diagrams.push(item));
                     (structured.moduleSummaries || []).forEach(item => moduleSummaries.push(item));
@@ -752,6 +847,18 @@ export class ResearchController {
                         continue;
                     }
                 } else {
+                    if (iteration < this.maxSteps) {
+                        this.emitProgress(`第 ${iteration} 轮：输出非 JSON 格式，要求重新输出 FINAL`);
+                        messages.push({ role: 'assistant', content: text });
+                        messages.push({
+                            role: 'user',
+                            content:
+                                '**错误**：你输出了非 JSON 格式的文本。请不要输出 Markdown 总结，你**必须**输出结构化 FINAL JSON。' +
+                                '如果你认为证据已经充足，请立即输出 FINAL JSON（schema 见系统提示）。' +
+                                '如果你认为需要继续调用工具收集证据，请调用工具而不是输出文本。'
+                        });
+                        continue;
+                    }
                     finalConclusion = text;
                 }
                 this.emitProgress(`第 ${iteration} 轮：已生成最终结论`);
@@ -767,12 +874,14 @@ export class ResearchController {
                     '若证据仍不足，返回 {"status":"need_more_evidence","missingEvidence":[...],"nextActions":[...]}，不要硬输出 FINAL。' +
                     '否则必须返回 JSON，schema 为：' +
                     '{"status":"ready"|"need_more_evidence","plan": string, "updates": string[], "finalConclusion": string, "references": string[],' +
+                    '"projectBackground": string（项目的目标、面向的用户群体、核心价值——基于 README/package.json 提炼，偏业务视角）,' +
+                    '"technicalOverview": string（宏观架构选型、核心技术栈、能力边界——偏技术/架构视角，与 projectBackground 形成侧重差异）,' +
                     '"architectureFindings": [{"title": string, "judgement": string, "evidence": string[]}],' +
                     '"criticalFlows": [{"name": string, "steps": string[], "evidence": string[]}],' +
                     '"risks": [{"risk": string, "impact": string, "evidence": string[]}],' +
                     '"unknowns": string[], "diagrams"?: string[], "moduleSummaries"?: string[], "missingEvidence"?: string[], "nextActions"?: string[]}。' +
                     '要求：每条结论必须附 evidence；核心判断必须来自 P0/P1 证据，P2 仅作补充；' +
-                    'diagrams 至少提供 2 条 Mermaid 源码（UI Layout 与 High-Level Architecture），禁止返回自然语言。'
+                    'diagrams 至少提供 2 条 Mermaid 源码（High-Level Component Architecture 与 Core Data/Control Flow），必须是抽象的业务/组件架构图，禁止返回 User→UI→API→Service→Data 万能分层图或自然语言。'
             });
         }
 
@@ -797,7 +906,8 @@ export class ResearchController {
                     tokenUsage.totalTokens,
                     this.maxTotalTokens,
                     tools,
-                    []
+                    [],
+                    alreadyReadFiles.size
                 );
                 apiRequestCount += 1;
                 await this.tryLog(logger, 'api_request', {
@@ -842,7 +952,8 @@ export class ResearchController {
                             args,
                             workspacePath,
                             discoveredFiles,
-                            discoveredDirs
+                            discoveredDirs,
+                            alreadyReadFiles
                         );
                         toolCallCount += 1;
                         const { contextOutput, evidence } = result;
@@ -873,6 +984,8 @@ export class ResearchController {
                             plan = structured.plan || plan;
                             updates.splice(0, updates.length, ...(structured.updates || updates));
                             finalConclusion = structured.finalConclusion || text;
+                            if (structured.projectBackground) { projectBackground = structured.projectBackground; }
+                            if (structured.technicalOverview) { technicalOverview = structured.technicalOverview; }
                             (structured.references || []).forEach(ref => references.add(ref));
                             this.normalizeMermaidDiagrams(structured.diagrams || []).forEach(item => diagrams.push(item));
                             (structured.moduleSummaries || []).forEach(item => moduleSummaries.push(item));
@@ -942,6 +1055,8 @@ export class ResearchController {
                     plan = structured.plan || plan;
                     updates.splice(0, updates.length, ...(structured.updates || updates));
                     finalConclusion = structured.finalConclusion || forcedText;
+                    if (structured.projectBackground) { projectBackground = structured.projectBackground; }
+                    if (structured.technicalOverview) { technicalOverview = structured.technicalOverview; }
                     (structured.references || []).forEach(ref => references.add(ref));
                     this.normalizeMermaidDiagrams(structured.diagrams || []).forEach(item => diagrams.push(item));
                     (structured.moduleSummaries || []).forEach(item => moduleSummaries.push(item));
@@ -971,6 +1086,37 @@ export class ResearchController {
             finalConclusion =
                 '已完成研究步骤，但模型未返回明确最终结论。建议增加 maxSteps 或检查 provider/model 配置。';
         }
+        if (moduleSummaries.length === 0) {
+            const componentDirs = Array.from(references).filter(r =>
+                /\/src\/components\/[A-Z][^/]*$/.test(r) || /\/src\/[a-z]+$/.test(r)
+            );
+            for (const dir of componentDirs.slice(0, 15)) {
+                moduleSummaries.push(`${path.basename(dir)}（基于目录结构发现）`);
+            }
+        }
+        if (architectureFindings.length === 0 && Array.from(references).length > 5) {
+            architectureFindings.push({
+                title: '前端技术栈',
+                judgement: technicalOverview || '基于 package.json 和目录结构推断技术栈',
+                evidence: Array.from(references).filter(r => /package\.json$/.test(r)).slice(0, 2)
+            });
+            const srcDirs = Array.from(references).filter(r => /\/src\/[a-z]+$/.test(r));
+            if (srcDirs.length > 0) {
+                architectureFindings.push({
+                    title: '前端目录组织',
+                    judgement: `源码目录包含 ${srcDirs.map(d => path.basename(d)).join('、')} 等子目录`,
+                    evidence: srcDirs.slice(0, 5)
+                });
+            }
+            const backendRefs = Array.from(references).filter(r => /\/backend\//.test(r) || /\/backend$/.test(r));
+            if (backendRefs.length > 0) {
+                architectureFindings.push({
+                    title: '后端服务',
+                    judgement: `存在独立的 backend 目录（${backendRefs.length} 条相关引用）`,
+                    evidence: backendRefs.slice(0, 3)
+                });
+            }
+        }
         const normalizedReferences = await this.normalizeReferences(Array.from(references), workspacePath);
         const referenceStats = this.buildReferenceStats(normalizedReferences);
         const forcedFinalTriggered = steps.some(step => step.action === 'forced_finalize');
@@ -994,6 +1140,23 @@ export class ResearchController {
             moduleSummaries
         });
         this.emitProgress(`研究完成：${normalizedReferences.length} 条可用引用，正在写入结果`);
+
+        if (!projectBackground || !technicalOverview) {
+            const fallbacks = this.extractFallbackFromMessages(messages);
+            if (!projectBackground && fallbacks.readmeContent) {
+                projectBackground = fallbacks.readmeContent.slice(0, 600);
+            }
+            if (!technicalOverview && fallbacks.packageJsonContent) {
+                try {
+                    const pkg = JSON.parse(fallbacks.packageJsonContent);
+                    const parts: string[] = [];
+                    if (pkg.description) { parts.push(pkg.description); }
+                    const deps = Object.keys(pkg.dependencies || {}).slice(0, 15);
+                    if (deps.length > 0) { parts.push(`核心依赖：${deps.join(', ')}`); }
+                    if (parts.length > 0) { technicalOverview = parts.join('。'); }
+                } catch { /* ignore parse error */ }
+            }
+        }
 
         const first3RoundToolCounts = steps
             .filter(s => s.stage === 'UPDATE' && s.iteration <= 3)
@@ -1029,6 +1192,8 @@ export class ResearchController {
             updates,
             finalConclusion,
             references: normalizedReferences,
+            projectBackground: projectBackground || undefined,
+            technicalOverview: technicalOverview || undefined,
             debugLogPath,
             tokenUsage,
             promptVersion: CORAWIKI_PROMPT_VERSION,
@@ -1048,7 +1213,8 @@ export class ResearchController {
         args: Record<string, unknown>,
         workspacePath: string,
         discoveredFiles: Set<string>,
-        discoveredDirs: Set<string>
+        discoveredDirs: Set<string>,
+        alreadyReadFiles: Set<string> = new Set()
     ): Promise<{ rawOutput: string; contextOutput: string; evidence: string[] }> {
         try {
             if (toolName === 'list_dir') {
@@ -1090,7 +1256,13 @@ export class ResearchController {
                         `原因：目标文件不在已发现文件集合中（禁止猜测路径）。\n${hint}`;
                     return { rawOutput: msg, contextOutput: msg, evidence: [] };
                 }
+                if (alreadyReadFiles.has(filePath)) {
+                    const msg = `duplicate_read_blocked(read_skeleton): ${filePath}\n此文件已在之前的轮次中读取过，请勿重复读取。将宝贵的工具调用机会用于尚未读取的文件。`;
+                    return { rawOutput: msg, contextOutput: msg, evidence: [] };
+                }
                 const skeleton = await readSkeleton(filePath);
+                alreadyReadFiles.add(filePath);
+                this.autoDiscoverImportedFiles(skeleton.imports, filePath, workspacePath, discoveredFiles, discoveredDirs);
                 const rawOutput = JSON.stringify(skeleton, null, 2);
                 const imports = skeleton.imports.slice(0, 30);
                 const symbols = skeleton.symbols.slice(0, 50);
@@ -1116,9 +1288,14 @@ export class ResearchController {
                         `原因：目标文件不在已发现文件集合中（禁止猜测路径）。\n${hint}`;
                     return { rawOutput: msg, contextOutput: msg, evidence: [] };
                 }
+                if (alreadyReadFiles.has(filePath)) {
+                    const msg = `duplicate_read_blocked(read_full_code): ${filePath}\n此文件已在之前的轮次中读取过，请勿重复读取。将宝贵的工具调用机会用于尚未读取的文件。`;
+                    return { rawOutput: msg, contextOutput: msg, evidence: [] };
+                }
                 const startLine = typeof args.startLine === 'number' ? args.startLine : undefined;
                 const endLine = typeof args.endLine === 'number' ? args.endLine : undefined;
                 const content = await readFullCode(filePath, { startLine, endLine });
+                alreadyReadFiles.add(filePath);
                 const contextOutput = this.compressCodeForContext(content);
                 return {
                     rawOutput: content,
@@ -1273,14 +1450,18 @@ export class ResearchController {
         totalTokens: number,
         maxTotalTokens: number,
         tools?: ToolSpec[],
-        lastRoundToolNames: string[] = []
+        lastRoundToolNames: string[] = [],
+        alreadyReadFilesCount: number = 0
     ): any[] {
         const remainingSteps = Math.max(0, maxSteps - iteration);
         const remainingTokens = Math.max(0, maxTotalTokens - totalTokens);
         let metaContent =
             `评估元数据：当前轮次=${iteration}/${maxSteps}，剩余轮次=${remainingSteps}，` +
-            `当前累计tokens=${totalTokens}，token预算上限=${maxTotalTokens}，剩余token预算=${remainingTokens}。` +
+            `当前累计tokens=${totalTokens}，token预算上限=${maxTotalTokens}，剩余token预算=${remainingTokens}，` +
+            `已深入读取代码文件=${alreadyReadFilesCount}个。` +
             `若证据不足请返回 need_more_evidence；若证据充分请优先收敛并输出 FINAL。`;
+        metaContent += `\n**并行调用**：每轮**必须**同时调用 3-5 个工具（在一次回复中返回多个 tool_calls），禁止每轮只调 1-2 个。` +
+            `例如：同时调用 read_skeleton(fileA) + read_skeleton(fileB) + list_dir(dirC) + summarize_directory(dirD)。`;
         if (tools && tools.length > 0) {
             const catalog = tools.map(t => `${t.function.name}=${t.function.description}`).join('；');
             metaContent += `\n可用工具及说明：${catalog}`;
@@ -1296,9 +1477,16 @@ export class ResearchController {
         if (iteration <= 2 && !hasDiscoverOrSummarize) {
             metaContent += '\n前 2 轮内建议至少各调用一次 discover_entrypoints(root) 与 summarize_directory(目标目录)，建立概览后再 list_dir 或 read_skeleton。';
         }
-        const onlyListDir = lastRoundToolNames.length === 1 && lastRoundToolNames[0] === 'list_dir';
+        const onlyListDir = lastRoundToolNames.length > 0 && lastRoundToolNames.every(n => n === 'list_dir');
         if (onlyListDir && iteration >= 2) {
-            metaContent += '\n禁止连续两轮只使用 list_dir；本轮请使用 read_skeleton 或 read_full_code 读取至少 1 个 P0 文件，或先调用 discover_entrypoints/summarize_directory。';
+            metaContent += '\n**禁止**连续两轮只使用 list_dir。本轮**必须**使用 read_skeleton 或 read_full_code 读取至少 1 个 P0 源码文件（src/**、backend/app/**），禁止再调 list_dir。';
+        }
+        const p0Refs = references.filter(r => /\/(src|backend|frontend|app|lib|packages)\/[^/]+\.(ts|tsx|js|jsx|py|go|rs|java|vue|svelte)$/i.test(r));
+        if (iteration >= 4 && p0Refs.length < 3) {
+            metaContent += `\n**警告**：已进行 ${iteration} 轮，但只读取了 ${p0Refs.length} 个 P0 源码文件。本轮**必须**优先使用 read_skeleton 或 read_full_code 深入阅读核心代码，禁止继续仅用 list_dir 探索。`;
+        }
+        if (alreadyReadFilesCount < 10 && iteration >= 3) {
+            metaContent += `\n**代码覆盖不足**：目前只深入读取了 ${alreadyReadFilesCount} 个文件，目标至少 15 个。请在本轮并行调用多个 read_skeleton 加速。`;
         }
         const runMeta = { role: 'system' as const, content: metaContent };
         /** 后续轮在 runMeta 后加一条短 user，满足部分 API（如 Minimax）要求请求中至少有一条 user 消息，避免 500。 */
@@ -1382,6 +1570,8 @@ export class ResearchController {
         updates?: string[];
         finalConclusion?: string;
         references?: string[];
+        projectBackground?: string;
+        technicalOverview?: string;
         diagrams?: string[];
         moduleSummaries?: string[];
         architectureFindings?: Array<{ title: string; judgement: string; evidence: string[] }>;
@@ -1523,40 +1713,7 @@ export class ResearchController {
 
     private ensureMinimumDiagrams(diagrams: string[]): string[] {
         const normalized = this.normalizeMermaidDiagrams(diagrams);
-        if (normalized.length >= 2) {
-            return normalized.slice(0, 6);
-        }
-        const fallbackUi = [
-            'flowchart LR',
-            '  User[User] --> UI[UI Layer]',
-            '  UI --> API[API Layer]',
-            '  API --> Service[Service Layer]',
-            '  Service --> Data[Data Layer]'
-        ].join('\n');
-        const fallbackArch = [
-            'flowchart TB',
-            '  subgraph Application',
-            '    A[Presentation]',
-            '    B[Application Services]',
-            '    C[Domain Model]',
-            '  end',
-            '  subgraph Infrastructure',
-            '    D[Database]',
-            '    E[Cache/Queue]',
-            '    F[External Systems]',
-            '  end',
-            '  A --> B --> C',
-            '  B --> D',
-            '  B --> E',
-            '  B --> F'
-        ].join('\n');
-        const out = [...normalized];
-        if (out.length === 0) {
-            out.push(fallbackUi, fallbackArch);
-        } else if (out.length === 1) {
-            out.push(fallbackArch);
-        }
-        return Array.from(new Set(out)).slice(0, 6);
+        return normalized.slice(0, 6);
     }
 
     private buildForcedFinalMessages(
@@ -1575,23 +1732,34 @@ export class ResearchController {
         userContent += `已读代码文件（read_skeleton/read_full_code）共 ${n} 个：${readCodePaths.slice(0, 20).join(', ')}${readCodePaths.length > 20 ? '...' : ''}\n`;
         if (n < 3) {
             userContent +=
-                '已读代码过少，若无法基于上述路径写出有证据支撑的 architectureFindings/criticalFlows，必须返回 status=need_more_evidence 并填写 missingEvidence 与 nextActions。\n';
+                '已读代码较少，但你仍**必须**基于已有的 README、package.json 和目录结构信息，尽力填充所有字段。\n';
         }
         userContent +=
             '请直接输出 FINAL JSON，不要输出其他文本。schema：' +
             '{"status":"ready"|"need_more_evidence","plan": string, "updates": string[], "finalConclusion": string, "references": string[],' +
-            '"architectureFindings": [{"title": string, "judgement": string, "evidence": string[]}],' +
-            '"criticalFlows": [{"name": string, "steps": string[], "evidence": string[]}],' +
-            '"risks": [{"risk": string, "impact": string, "evidence": string[]}],' +
-            '"unknowns": string[], "diagrams"?: string[], "moduleSummaries"?: string[], "missingEvidence"?: string[], "nextActions"?: string[]}。' +
-            'status=ready 时必须满足证据配额与章节契约；status=need_more_evidence 时给出 missingEvidence 和 nextActions。';
+            '"projectBackground": string（**必填**至少 80 字：项目要解决的核心问题、目标用户画像、差异化价值主张，不要照搬 README 原文，要提炼洞察）,' +
+            '"technicalOverview": string（**必填**至少 100 字：站在架构师视角阐述——技术选型理由、整体分层策略、核心设计模式如 MVC/Event-Driven/Plugin、前后端协作方式、关键依赖的选型权衡）,' +
+            '"architectureFindings": [{"title": string, "judgement": string, "evidence": string[]}]（**必须至少 5 条**，每条是一个架构优劣势判断而非简单罗列）,' +
+            '"criticalFlows": [{"name": string, "steps": string[], "evidence": string[]}]（**必须至少 2 条**，每条至少 5 步，选择最体现系统复杂度的流程）,' +
+            '"risks": [{"risk": string, "impact": string, "evidence": string[]}]（至少 2 条技术风险）,' +
+            '"unknowns": string[], ' +
+            '"diagrams"?: string[]（**必须至少 2 条 Mermaid 源码**：(1)基于真实模块名的组件架构图 (2)核心业务流程 sequence/flowchart，禁止万能分层图）, ' +
+            '"moduleSummaries"?: string[]（**必须列出每个已发现模块的职责描述和核心接口，不要只写目录名**）, ' +
+            '"missingEvidence"?: string[], "nextActions"?: string[]}。' +
+            '所有数组字段**禁止为空**。不确定的内容用合理推断 + unknowns 标注。';
         return [
             {
                 role: 'system',
                 content:
                     '你是 CoraWiki 的 FINAL 汇总器。你不能调用工具，只能基于已有证据输出最终 JSON。' +
-                    '必须先自检证据质量：P0 占比>=60%，P2 占比<=20%，章节完整且无重复。' +
-                    '若证据不足，必须返回 status=need_more_evidence，不允许硬输出质量不达标的 FINAL。'
+                    '**核心要求**：无论 status 是 ready 还是 need_more_evidence，你都**必须**尽力填充所有字段。' +
+                    'projectBackground 必须根据 README 或项目描述填写项目目标与价值；technicalOverview 必须根据 package.json 或已读代码填写技术栈与架构选型。' +
+                    'architectureFindings 至少提供 5 条基于已有证据的**架构判断**（不是简单罗列"使用了XX"，而是架构优劣势分析，如"采用 XX 模式使得 YY 解耦，但缺少 ZZ 导致 WW 风险"）；' +
+                    'criticalFlows 至少提供 2 条，每条至少 5 步，选择最能体现系统复杂度的业务流程；' +
+                    'moduleSummaries 必须列出每个模块的职责描述和核心对外接口，不要只写目录名。' +
+                    'diagrams 必须提供至少 2 条 Mermaid 源码：(1) 基于实际阅读代码的组件架构图，标注真实模块名和依赖方向 (2) 至少一个核心业务流程的 sequence 或 flowchart 图。' +
+                    '**禁止**返回空数组，**禁止**返回 User→UI→API→Service→Data 的万能分层图。' +
+                    '如果证据有限，基于已有信息进行合理推断并在 unknowns 中标注待确认项。'
             },
             {
                 role: 'user',
@@ -1816,6 +1984,165 @@ export class ResearchController {
             await logger.appendDecision(iteration, content, toolNames);
         } catch {
             // Logging failures should not block research flow.
+        }
+    }
+
+    /** Pre-populate discoveredFiles with common root-level project descriptor files so the LLM can read them without prior list_dir. */
+    private async injectRootWhitelistFiles(
+        workspacePath: string,
+        discoveredFiles: Set<string>
+    ): Promise<void> {
+        try {
+            const entries = await fs.readdir(workspacePath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isFile()) {
+                    continue;
+                }
+                if (ROOT_WHITELIST_PATTERNS.some(re => re.test(entry.name))) {
+                    discoveredFiles.add(path.join(workspacePath, entry.name));
+                }
+            }
+        } catch {
+            // If root dir is unreadable, skip silently — tools will still discover files normally.
+        }
+    }
+
+    private extractFallbackFromMessages(messages: any[]): { readmeContent?: string; packageJsonContent?: string } {
+        let readmeContent: string | undefined;
+        let packageJsonContent: string | undefined;
+        for (const msg of messages) {
+            if (msg.role !== 'tool') { continue; }
+            const content = String(msg.content ?? '');
+            if (!readmeContent && /readme[._-]?/i.test(content.slice(0, 80))) {
+                const lines = content.split('\n');
+                const bodyLines = lines.filter(l => !l.startsWith('read_full_code(') && !l.startsWith('read_skeleton('));
+                if (bodyLines.length > 2) {
+                    readmeContent = bodyLines.join('\n').trim();
+                }
+            }
+            if (!packageJsonContent && content.includes('"dependencies"') && content.includes('"name"')) {
+                const jsonMatch = content.match(/\{[\s\S]*"name"[\s\S]*\}/);
+                if (jsonMatch) {
+                    packageJsonContent = jsonMatch[0];
+                }
+            }
+            if (readmeContent && packageJsonContent) { break; }
+        }
+        return { readmeContent, packageJsonContent };
+    }
+
+    private async scanHotspotModules(workspacePath: string): Promise<{
+        summary: string | undefined;
+        indexFiles: string[];
+    }> {
+        const scanDirs = ['src', 'frontend/src', 'backend/app', 'backend', 'app', 'lib', 'packages'];
+        const moduleStats: Array<{ dir: string; absDir: string; fileCount: number; dirCount: number }> = [];
+        const skipNames = new Set(['node_modules', '.git', 'dist', 'build', 'out', '__pycache__', '.next', '.nuxt', 'coverage']);
+
+        for (const rel of scanDirs) {
+            const full = path.join(workspacePath, rel);
+            try {
+                const st = await fs.stat(full);
+                if (!st.isDirectory()) continue;
+            } catch { continue; }
+
+            try {
+                const entries = await fs.readdir(full, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (!entry.isDirectory() || skipNames.has(entry.name) || entry.name.startsWith('.')) continue;
+                    const subDir = path.join(full, entry.name);
+                    try {
+                        const { fileCount, dirCount } = await this.countFilesRecursive(subDir, 3);
+                        if (fileCount > 5) {
+                            moduleStats.push({ dir: `${rel}/${entry.name}`, absDir: subDir, fileCount, dirCount });
+                        }
+                    } catch { /* skip unreadable dirs */ }
+                }
+            } catch { /* skip */ }
+        }
+
+        if (moduleStats.length === 0) return { summary: undefined, indexFiles: [] };
+        moduleStats.sort((a, b) => b.fileCount - a.fileCount);
+
+        const indexCandidates = ['index.ts', 'index.tsx', 'index.js', 'index.jsx', 'index.vue', 'index.py', 'main.ts', 'main.tsx', 'main.js', 'main.py'];
+        const indexFiles: string[] = [];
+        for (const mod of moduleStats.slice(0, 8)) {
+            for (const candidate of indexCandidates) {
+                const candidatePath = path.join(mod.absDir, candidate);
+                try {
+                    await fs.access(candidatePath);
+                    indexFiles.push(candidatePath);
+                    break;
+                } catch { /* not found, try next */ }
+            }
+        }
+
+        const top = moduleStats.slice(0, 20);
+        const lines = top.map(m => `  ${m.dir}: ${m.fileCount} files, ${m.dirCount} subdirs`);
+        const summary = `【热点模块扫描】按文件数排序的子模块（共发现 ${moduleStats.length} 个）：\n${lines.join('\n')}\n建议优先对文件数最多的模块使用 read_skeleton 或 summarize_directory 深入分析。`;
+        return { summary, indexFiles };
+    }
+
+    private async countFilesRecursive(dir: string, maxDepth: number): Promise<{ fileCount: number; dirCount: number }> {
+        let fileCount = 0;
+        let dirCount = 0;
+        const stack: Array<{ path: string; depth: number }> = [{ path: dir, depth: 0 }];
+        const skipNames = new Set(['node_modules', '.git', 'dist', 'build', 'out', '__pycache__', '.next', '.nuxt', 'coverage']);
+
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            try {
+                const entries = await fs.readdir(current.path, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.name.startsWith('.') || skipNames.has(entry.name)) continue;
+                    if (entry.isDirectory()) {
+                        dirCount++;
+                        if (current.depth < maxDepth) {
+                            stack.push({ path: path.join(current.path, entry.name), depth: current.depth + 1 });
+                        }
+                    } else {
+                        fileCount++;
+                    }
+                }
+            } catch { /* skip */ }
+        }
+        return { fileCount, dirCount };
+    }
+
+    private autoDiscoverImportedFiles(
+        imports: string[],
+        sourceFilePath: string,
+        workspacePath: string,
+        discoveredFiles: Set<string>,
+        discoveredDirs: Set<string>
+    ): void {
+        const sourceDir = path.dirname(sourceFilePath);
+        const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte', '.py'];
+
+        for (const imp of imports) {
+            if (!imp.startsWith('.')) {
+                continue;
+            }
+            const resolved = path.resolve(sourceDir, imp);
+            if (!resolved.startsWith(workspacePath)) {
+                continue;
+            }
+            if (discoveredFiles.has(resolved)) {
+                continue;
+            }
+            const ext = path.extname(resolved);
+            if (ext) {
+                discoveredFiles.add(resolved);
+                discoveredDirs.add(path.dirname(resolved));
+            } else {
+                for (const e of extensions) {
+                    discoveredFiles.add(resolved + e);
+                }
+                discoveredFiles.add(path.join(resolved, 'index.ts'));
+                discoveredFiles.add(path.join(resolved, 'index.js'));
+                discoveredDirs.add(resolved);
+                discoveredDirs.add(path.dirname(resolved));
+            }
         }
     }
 }
