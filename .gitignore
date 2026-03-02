@@ -7,3 +7,5 @@ test-workspace
 .DS_Store
 .env
 .cursor/**
+.cora/logs/
+.cora/reports/
