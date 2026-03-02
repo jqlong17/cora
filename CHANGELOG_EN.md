@@ -1,22 +1,16 @@
 # Changelog
 
+## \[0.2.2] - 2026-03-02
+
+### Improved
+
+* **CoraWiki report stability improvement**: Improved FINAL output robustness so report generation remains stable under malformed model responses, with key sections generated reliably and fewer missing fields.
+
 ## \[0.2.1] - 2026-03-02
 
 ### Improved
 
-* **CoraWiki report quality**: Significantly improved depth and accuracy of AI architecture analysis reports:
-
-  * Pre-analysis phase auto-scans hotspot modules (ranked by file count) and pre-reads top 5 module index files via `read_skeleton`, ensuring large modules are never missed
-
-  * Enforced parallel tool calls (3-5 per round), achieving 15+ code files read within 10 rounds for much better code coverage
-
-  * Removed generic fallback architecture diagrams; Mermaid diagrams are now generated entirely from LLM's actual code reading, reflecting real module dependencies
-
-  * Blocked duplicate file reads to prevent wasting tool call budget
-
-  * Intercepted non-JSON premature convergence to prevent model from outputting Markdown text and wasting rounds
-
-  * Strengthened system prompt for high-level architecture insights (≥5 architecture findings, ≥2 critical flows with ≥5 steps each), targeting Tech Lead / Architect readers
+* **CoraWiki report quality**: Optimized analysis strategy and prompt constraints to improve architecture insight depth, accuracy, and report readability.
 
 ## \[0.2.0] - 2026-03-01
 

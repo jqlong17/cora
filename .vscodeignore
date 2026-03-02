@@ -1,6 +1,8 @@
 .vscode/**
 # .cursor/ 为本项目自用（plans 登记表、rules 等），不随 CoraPlan 产品打包
 .cursor/**
+# .cora/ 是项目自身的分析结果，不随扩展打包
+.cora/**
 .vscode-test/**
 src/**
 .gitignore

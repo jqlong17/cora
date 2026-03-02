@@ -1587,15 +1587,163 @@ export class ResearchController {
         if (start < 0 || end <= start) {
             return undefined;
         }
+        let jsonCandidate = trimmed.slice(start, end + 1);
         try {
-            const parsed = JSON.parse(trimmed.slice(start, end + 1));
+            const parsed = JSON.parse(jsonCandidate);
             if (typeof parsed !== 'object' || !parsed) {
                 return undefined;
             }
-            return parsed;
+            return this.rescueNestedFields(parsed);
         } catch {
+            const repaired = this.repairTruncatedJson(jsonCandidate);
+            if (repaired) {
+                return this.rescueNestedFields(repaired);
+            }
+            return this.extractFieldsViaRegex(jsonCandidate);
+        }
+    }
+
+    /**
+     * LLM output may be truncated mid-JSON (e.g. token limit).
+     * Try to close unclosed brackets/braces so JSON.parse succeeds.
+     */
+    private repairTruncatedJson(json: string): Record<string, unknown> | undefined {
+        let attempt = json;
+        const openBraces = (attempt.match(/{/g) || []).length;
+        const closeBraces = (attempt.match(/}/g) || []).length;
+        const openBrackets = (attempt.match(/\[/g) || []).length;
+        const closeBrackets = (attempt.match(/]/g) || []).length;
+        const lastChar = attempt.trimEnd().slice(-1);
+        if (lastChar === '"' || lastChar === ',') {
+            attempt = attempt.trimEnd().slice(0, -1);
+        }
+        const missingBrackets = openBrackets - closeBrackets;
+        const missingBraces = openBraces - closeBraces;
+        if (missingBrackets <= 0 && missingBraces <= 0) {
             return undefined;
         }
+        attempt += ']'.repeat(Math.max(0, missingBrackets)) + '}'.repeat(Math.max(0, missingBraces));
+        try {
+            const parsed = JSON.parse(attempt);
+            if (typeof parsed === 'object' && parsed) {
+                return parsed;
+            }
+        } catch { /* still broken */ }
+        return undefined;
+    }
+
+    /**
+     * Last resort: when JSON is structurally broken beyond repair,
+     * extract top-level string/array fields via regex.
+     */
+    private extractFieldsViaRegex(json: string): Record<string, unknown> | undefined {
+        const result: Record<string, unknown> = {};
+        const stringFields = [
+            'status', 'plan', 'finalConclusion', 'projectBackground', 'technicalOverview'
+        ];
+        for (const field of stringFields) {
+            const pattern = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+            const m = json.match(pattern);
+            if (m) {
+                try {
+                    result[field] = JSON.parse(`"${m[1]}"`);
+                } catch {
+                    result[field] = m[1];
+                }
+            }
+        }
+        const arrayStringFields = ['updates', 'references', 'unknowns', 'moduleSummaries'];
+        for (const field of arrayStringFields) {
+            const pattern = new RegExp(`"${field}"\\s*:\\s*\\[([^\\]]*?)\\]`);
+            const m = json.match(pattern);
+            if (m) {
+                try {
+                    result[field] = JSON.parse(`[${m[1]}]`);
+                } catch { /* skip broken array */ }
+            }
+        }
+        const diagramsMatch = json.match(/"diagrams"\s*:\s*\[([\s\S]*?)\]\s*[,}]/);
+        if (diagramsMatch) {
+            try {
+                result.diagrams = JSON.parse(`[${diagramsMatch[1]}]`);
+            } catch { /* skip */ }
+        }
+        const architectureFindingsRaw = this.extractJsonArray(json, 'architectureFindings');
+        if (architectureFindingsRaw) { result.architectureFindings = architectureFindingsRaw; }
+        const criticalFlowsRaw = this.extractJsonArray(json, 'criticalFlows');
+        if (criticalFlowsRaw) { result.criticalFlows = criticalFlowsRaw; }
+        const risksRaw = this.extractJsonArray(json, 'risks');
+        if (risksRaw) { result.risks = risksRaw; }
+
+        if (Object.keys(result).length < 2) {
+            return undefined;
+        }
+        return this.rescueNestedFields(result);
+    }
+
+    /**
+     * Try to extract a JSON array field from potentially broken JSON
+     * by finding the key, then parsing entries one-by-one.
+     * Tolerates extra closing braces (common MiniMax issue).
+     */
+    private extractJsonArray(json: string, key: string): Array<Record<string, unknown>> | undefined {
+        const keyIdx = json.indexOf(`"${key}"`);
+        if (keyIdx < 0) { return undefined; }
+        const arrStart = json.indexOf('[', keyIdx);
+        if (arrStart < 0 || arrStart - keyIdx > key.length + 10) { return undefined; }
+        const items: Array<Record<string, unknown>> = [];
+        let depth = 0;
+        let objStart = -1;
+        let inString = false;
+        let escape = false;
+        for (let i = arrStart + 1; i < json.length; i++) {
+            const c = json[i];
+            if (escape) { escape = false; continue; }
+            if (c === '\\') { escape = true; continue; }
+            if (c === '"') { inString = !inString; continue; }
+            if (inString) { continue; }
+            if (c === '{') {
+                if (depth === 0) { objStart = i; }
+                depth++;
+            } else if (c === '}') {
+                depth--;
+                if (depth === 0 && objStart >= 0) {
+                    try {
+                        items.push(JSON.parse(json.slice(objStart, i + 1)));
+                    } catch {
+                        const repaired = this.repairTruncatedJson(json.slice(objStart, i + 1));
+                        if (repaired) { items.push(repaired); }
+                    }
+                    objStart = -1;
+                }
+                if (depth < 0) { depth = 0; objStart = -1; }
+            } else if (c === ']' && depth <= 0) {
+                break;
+            }
+        }
+        return items.length > 0 ? items : undefined;
+    }
+
+    /**
+     * Some LLMs nest top-level fields (risks, diagrams, etc.) inside the
+     * last architectureFinding instead of at the top level. Move them up.
+     */
+    private rescueNestedFields(parsed: Record<string, unknown>): Record<string, unknown> {
+        const findings = parsed.architectureFindings as Array<Record<string, unknown>> | undefined;
+        if (!Array.isArray(findings) || findings.length === 0) {
+            return parsed;
+        }
+        const rescueKeys = ['risks', 'unknowns', 'criticalFlows', 'diagrams', 'moduleSummaries', 'missingEvidence', 'nextActions'];
+        const last = findings[findings.length - 1];
+        for (const key of rescueKeys) {
+            if (!Array.isArray(parsed[key]) || (parsed[key] as unknown[]).length === 0) {
+                if (Array.isArray(last[key]) && (last[key] as unknown[]).length > 0) {
+                    parsed[key] = last[key];
+                    delete last[key];
+                }
+            }
+        }
+        return parsed;
     }
 
     private getReadCodeCountFromSteps(steps: ResearchStep[]): number {
