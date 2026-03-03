@@ -13,9 +13,12 @@ class CoraMarkdownDocument implements vscode.CustomDocument {
 
 /**
  * 将 .md 等以「Cora 预览」形式打开的 Custom Editor Provider。
- * 当 workbench.editorAssociations 将 *.md 关联到本 viewType 时，从链接/资源管理器打开即直接用 Cora 预览。
+ * 不再通过 editorAssociations 全局劫持 .md 的打开方式；
+ * 仅当用户手动配置或扩展内部明确使用时才触发。
  */
 export class CoraMarkdownEditorProvider implements vscode.CustomReadonlyEditorProvider<CoraMarkdownDocument> {
+    private activePanel: vscode.WebviewPanel | undefined;
+
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly previewProvider: PreviewProvider
@@ -34,6 +37,8 @@ export class CoraMarkdownEditorProvider implements vscode.CustomReadonlyEditorPr
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        this.activePanel = webviewPanel;
+
         const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri);
         webviewPanel.webview.options = {
             enableScripts: true,
@@ -48,6 +53,16 @@ export class CoraMarkdownEditorProvider implements vscode.CustomReadonlyEditorPr
                 vscode.commands.executeCommand('knowledgeBase.openEditor', document.uri);
             }
         });
+
+        webviewPanel.onDidDispose(() => {
+            if (this.activePanel === webviewPanel) {
+                this.activePanel = undefined;
+            }
+        });
+    }
+
+    postMessageToWebview(message: { command: string }): void {
+        this.activePanel?.webview.postMessage(message);
     }
 }
 

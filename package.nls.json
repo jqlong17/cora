@@ -49,6 +49,8 @@
   "cmd.openCoraPlanUsage": "CoraPlan usage",
   "cmd.openCoraPlanPlan": "Open plan",
   "cmd.deleteCoraPlanPlan": "Delete plan",
+  "cmd.undo": "Undo",
+  "cmd.redo": "Redo",
   "config.filterMode.description": "Page tree file filter mode",
   "config.showHiddenFiles.description": "Show hidden files and folders (dotfiles, except .git)",
   "config.filterMode.all": "Show all files",

@@ -169,9 +169,9 @@ async function initEditor() {
     const editorElement = document.querySelector('#editor');
     const vscode = acquireVsCodeApi();
     const bundleUrl = window.__CORA_BUNDLE__;
+    const historyBundleUrl = window.__CORA_HISTORY_BUNDLE__;
     const mermaidUrl = window.__CORA_MERMAID__;
 
-    // 暴露全局切换函数
     let currentMarkdown = '';
     let isSourceMode = false;
     let visualContainer, sourceContainer, textarea, tabVisual, tabSource;
@@ -182,9 +182,16 @@ async function initEditor() {
         const initialContent = dataEl ? JSON.parse(dataEl.textContent) : '';
         currentMarkdown = initialContent;
 
-        // 2. 加载 Milkdown
+        // 2. 加载 Milkdown + prosemirror-history
         const milkdown = await import(bundleUrl);
-        const { Editor, rootCtx, defaultValueCtx, commonmark, gfm, nord, listener, listenerCtx, prism, editorViewOptionsCtx, replaceAll } = milkdown;
+        const { Editor, rootCtx, defaultValueCtx, commonmark, gfm, nord, listener, listenerCtx, prism, editorViewOptionsCtx, replaceAll, $prose, editorViewCtx } = milkdown;
+
+        let pmHistory = null;
+        try {
+            pmHistory = await import(historyBundleUrl);
+        } catch (e) {
+            debug('prosemirror-history 加载失败: ' + e.message);
+        }
 
         // 获取 DOM 引用
         visualContainer = document.getElementById('visual-editor-container');
@@ -807,7 +814,7 @@ async function initEditor() {
         };
 
         // 5. 创建编辑器
-        const editor = await Editor.make()
+        let editorBuilder = Editor.make()
             .config((ctx) => {
                 ctx.set(rootCtx, editorElement);
                 ctx.set(defaultValueCtx, initialContent);
@@ -848,10 +855,37 @@ async function initEditor() {
             .use(commonmark)
             .use(gfm)
             .use(listener)
-            .use(prism)
-            .create();
+            .use(prism);
+
+        if (pmHistory) {
+            const historyPlugin = $prose(() => pmHistory.history());
+            editorBuilder = editorBuilder.use(historyPlugin);
+        }
+
+        const editor = await editorBuilder.create();
 
         window.editor = editor;
+
+        const performUndo = () => {
+            if (isSourceMode) {
+                document.execCommand('undo');
+            } else if (pmHistory) {
+                try {
+                    const view = editor.ctx.get(editorViewCtx);
+                    pmHistory.undo(view.state, view.dispatch);
+                } catch (e) { debug('undo failed: ' + e.message); }
+            }
+        };
+        const performRedo = () => {
+            if (isSourceMode) {
+                document.execCommand('redo');
+            } else if (pmHistory) {
+                try {
+                    const view = editor.ctx.get(editorViewCtx);
+                    pmHistory.redo(view.state, view.dispatch);
+                } catch (e) { debug('redo failed: ' + e.message); }
+            }
+        };
 
         function applyImageMap(container, imageMap) {
             if (!container || !imageMap || Object.keys(imageMap).length === 0) return;
@@ -891,6 +925,15 @@ async function initEditor() {
 
             if (message.command === 'openLocalFind') {
                 openFindBar();
+                return;
+            }
+
+            if (message.command === 'undo') {
+                performUndo();
+                return;
+            }
+            if (message.command === 'redo') {
+                performRedo();
                 return;
             }
 

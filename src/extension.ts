@@ -67,7 +67,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(pageTreeView, outlineTreeView, coraWikiTreeView, coraPlanTreeView);
 
-    // ── 4. 构建服务容器 & 注册命令 / 监听器 ──
+    // ── 4. 注册 Markdown Custom Editor ──
+    const coraMarkdownEditorProvider = new CoraMarkdownEditorProvider(context, previewProvider);
+    context.subscriptions.push(
+        vscode.window.registerCustomEditorProvider(
+            CORA_MARKDOWN_VIEW_TYPE,
+            coraMarkdownEditorProvider,
+            {
+                webviewOptions: { retainContextWhenHidden: true },
+                supportsMultipleEditorsPerDocument: false
+            }
+        )
+    );
+    // 清理历史遗留的 editorAssociations（不再用全局关联劫持 .md 打开方式）
+    syncEditorAssociationsForPreviewOnClick(configService);
+
+    // ── 5. 构建服务容器 & 注册命令 / 监听器 ──
     const container: ServiceContainer = {
         configService,
         fileService,
@@ -78,6 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
         searchProvider,
         coraWikiProvider,
         coraPlanProvider,
+        coraMarkdownEditorProvider,
         pageTreeView,
         coraWikiTreeView,
         coraPlanTreeView,
@@ -115,20 +131,6 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
-
-    // ── 5. 注册 Markdown Custom Editor（供「从链接/资源管理器打开即用 Cora 预览」） ──
-    const coraMarkdownProvider = new CoraMarkdownEditorProvider(context, previewProvider);
-    context.subscriptions.push(
-        vscode.window.registerCustomEditorProvider(
-            CORA_MARKDOWN_VIEW_TYPE,
-            coraMarkdownProvider,
-            {
-                webviewOptions: { retainContextWhenHidden: true },
-                supportsMultipleEditorsPerDocument: false
-            }
-        )
-    );
-    syncEditorAssociationsForPreviewOnClick(configService);
 
     // ── 6. 初始化当前编辑器的大纲 ──
     if (vscode.window.activeTextEditor) {

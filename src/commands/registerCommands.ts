@@ -12,6 +12,7 @@ import { FavoritesService } from '../services/favoritesService';
 import * as commands from '../commands';
 import { t } from '../utils/i18n';
 import { syncPageTreeViewLayoutContext } from '../utils/pageTreeContext';
+import type { CoraMarkdownEditorProvider } from '../editors/coraMarkdownEditorProvider';
 
 export interface ServiceContainer {
     configService: ConfigService;
@@ -23,6 +24,7 @@ export interface ServiceContainer {
     searchProvider: SearchProvider;
     coraWikiProvider: CoraWikiProvider;
     coraPlanProvider: CoraPlanProvider;
+    coraMarkdownEditorProvider: CoraMarkdownEditorProvider;
     pageTreeView: vscode.TreeView<PageTreeItem>;
     coraWikiTreeView: vscode.TreeView<CoraWikiItem>;
     coraPlanTreeView: vscode.TreeView<CoraPlanItem>;
@@ -216,6 +218,16 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
             if (planPath) {
                 void commands.deleteCoraPlanPlan(planPath, c.coraPlanProvider);
             }
+        }),
+
+        // ── 编辑器撤销 / 重做（覆盖 WebviewPanel 和 Custom Editor 两种入口） ──
+        vscode.commands.registerCommand('knowledgeBase.undo', () => {
+            c.previewProvider.postMessageToWebview({ command: 'undo' });
+            c.coraMarkdownEditorProvider.postMessageToWebview({ command: 'undo' });
+        }),
+        vscode.commands.registerCommand('knowledgeBase.redo', () => {
+            c.previewProvider.postMessageToWebview({ command: 'redo' });
+            c.coraMarkdownEditorProvider.postMessageToWebview({ command: 'redo' });
         })
     );
     syncPageTreeViewLayoutContext(c.configService);

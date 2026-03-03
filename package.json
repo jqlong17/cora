@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "%extension.description%",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -277,14 +277,34 @@
         "command": "knowledgeBase.deleteCoraPlanPlan",
         "title": "%cmd.deleteCoraPlanPlan%",
         "icon": "$(trash)"
+      },
+      {
+        "command": "knowledgeBase.undo",
+        "title": "%cmd.undo%",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "knowledgeBase.redo",
+        "title": "%cmd.redo%",
+        "icon": "$(redo)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "knowledgeBase.selectFont",
-          "when": "activeWebviewPanelId == 'coraPreview'",
+          "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'",
           "group": "navigation@1"
+        },
+        {
+          "command": "knowledgeBase.undo",
+          "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'",
+          "group": "1_undo@1"
+        },
+        {
+          "command": "knowledgeBase.redo",
+          "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'",
+          "group": "1_undo@2"
         }
       ],
       "view/title": [
@@ -722,7 +742,19 @@
         "command": "knowledgeBase.openEditor",
         "key": "cmd+e",
         "mac": "cmd+e",
-        "when": "activeWebviewPanelId == 'coraPreview'"
+        "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'"
+      },
+      {
+        "command": "knowledgeBase.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'"
+      },
+      {
+        "command": "knowledgeBase.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "activeWebviewPanelId == 'coraPreview' || activeWebviewPanelId == 'cora.markdown.preview'"
       }
     ]
   },
@@ -750,6 +782,9 @@
     "eslint": "^8.57.0",
     "glob": "^10.3.10",
     "mocha": "^10.3.0",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-state": "^1.4.4",
     "typescript": "^5.5.0"
   },
   "dependencies": {

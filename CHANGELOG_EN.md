@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.2.3] - 2026-03-03
+
+### Added
+
+* **Editor undo/redo**: Cora preview editor now supports Cmd+Z to undo and Cmd+Shift+Z to redo, covering Visual mode, Markdown source mode, and Marked read-only mode. Undo and redo are also available in the editor title bar overflow menu.
+
+### Fixed
+
+* **Duplicate tab issue**: Fixed .md files being forcibly replaced by Cora preview when opened from the explorer, chat links, or other non-Cora entry points. Cora preview is now only used when opening from Cora's own entry points (page tree, commands, etc.); all other entry points retain system-native behavior.
+
 ## \[0.2.2] - 2026-03-02
 
 ### Improved

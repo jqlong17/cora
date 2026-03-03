@@ -1,22 +1,28 @@
 import * as vscode from 'vscode';
 import { ServiceContainer } from '../commands/registerCommands';
 import type { ConfigService } from '../services/configService';
-import { isMarkdownFile } from '../utils/markdownParser';
 import { CORA_MARKDOWN_VIEW_TYPE } from '../editors/coraMarkdownEditorProvider';
 
-/** 根据「点击用预览打开」同步 workbench.editorAssociations（供 extension 激活时与配置变更时调用） */
-export function syncEditorAssociationsForPreviewOnClick(configService: ConfigService): void {
-    const useCora = configService.getPreviewOnClick();
+/**
+ * 清理 workbench.editorAssociations 中 Cora 对 .md 的全局关联。
+ * Cora 预览仅在扩展内部入口（页面树、命令等）主动打开时使用，
+ * 不通过 editorAssociations 劫持系统其它入口打开的 .md。
+ */
+export function syncEditorAssociationsForPreviewOnClick(_configService: ConfigService): void {
     const cfg = vscode.workspace.getConfiguration('workbench');
     const current = cfg.get<Record<string, string>>('editorAssociations') ?? {};
     const patterns = ['*.md', '*.markdown', '*.mdx', '*.mdc'];
     const next = { ...current };
-    if (useCora) {
-        for (const p of patterns) next[p] = CORA_MARKDOWN_VIEW_TYPE;
-    } else {
-        for (const p of patterns) delete next[p];
+    let changed = false;
+    for (const p of patterns) {
+        if (next[p] === CORA_MARKDOWN_VIEW_TYPE) {
+            delete next[p];
+            changed = true;
+        }
     }
-    void cfg.update('editorAssociations', next, vscode.ConfigurationTarget.Global);
+    if (changed) {
+        void cfg.update('editorAssociations', next, vscode.ConfigurationTarget.Global);
+    }
 }
 
 /**
@@ -161,73 +167,4 @@ export function registerListeners(context: vscode.ExtensionContext, c: ServiceCo
         })
     );
 
-    // ── 从对话/链接等处以文本形式打开 .md 时，若开启「点击用预览打开」，则用 Cora 预览打开并关闭文本标签 ──
-    const pendingReplaceUris = new Map<string, { uri: vscode.Uri; clearAt: number }>();
-    const TTL_MS = 4000;
-    const clearStale = (): void => {
-        const now = Date.now();
-        for (const [key, val] of pendingReplaceUris.entries()) {
-            if (val.clearAt < now) pendingReplaceUris.delete(key);
-        }
-    };
-    const closeTextTabForUri = (uriKey: string): boolean => {
-        for (const group of vscode.window.tabGroups.all) {
-            for (const tab of group.tabs) {
-                const ti = tab.input as { uri?: vscode.Uri; viewType?: string };
-                if (ti?.uri?.toString() === uriKey && ti.viewType !== 'coraPreview' && ti.viewType !== CORA_MARKDOWN_VIEW_TYPE) {
-                    void vscode.window.tabGroups.close(tab);
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
-    const tryReplaceWithPreview = (uriKey: string, uri: vscode.Uri): void => {
-        void vscode.commands.executeCommand('knowledgeBase.openPreview', uri).then(() => {
-            if (!closeTextTabForUri(uriKey)) {
-                setTimeout(() => closeTextTabForUri(uriKey), 400);
-            }
-        });
-    };
-
-    context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument((document) => {
-            if (document.uri.scheme !== 'file') return;
-            const exts = c.configService.getMarkdownExtensions();
-            if (!isMarkdownFile(document.uri.fsPath, exts)) return;
-            if (!c.configService.getPreviewOnClick()) return;
-
-            const uri = document.uri;
-            const uriKey = uri.toString();
-            if (pendingReplaceUris.has(uriKey)) return;
-            const clearAt = Date.now() + TTL_MS;
-            pendingReplaceUris.set(uriKey, { uri, clearAt });
-            setTimeout(clearStale, TTL_MS + 100);
-
-            setTimeout(() => {
-                if (!pendingReplaceUris.has(uriKey)) return;
-                pendingReplaceUris.delete(uriKey);
-                tryReplaceWithPreview(uriKey, uri);
-            }, 400);
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.window.tabGroups.onDidChangeTabs((e) => {
-            if (!e.opened.length || !c.configService.getPreviewOnClick()) return;
-            clearStale();
-            for (const tab of e.opened) {
-                const ti = tab.input as { uri?: vscode.Uri; viewType?: string };
-                const uriKey = ti?.uri?.toString();
-                if (!uriKey || ti.viewType === 'coraPreview') continue;
-                const pending = pendingReplaceUris.get(uriKey);
-                if (!pending) continue;
-                const exts = c.configService.getMarkdownExtensions();
-                if (!isMarkdownFile(pending.uri.fsPath, exts)) continue;
-                pendingReplaceUris.delete(uriKey);
-                tryReplaceWithPreview(uriKey, pending.uri);
-                return;
-            }
-        })
-    );
 }

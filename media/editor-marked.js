@@ -782,6 +782,14 @@
             openFindBar();
             return;
         }
+        if (message.command === 'undo') {
+            if (isSourceMode) document.execCommand('undo');
+            return;
+        }
+        if (message.command === 'redo') {
+            if (isSourceMode) document.execCommand('redo');
+            return;
+        }
         if (message.command === 'scrollToLine') {
             const line = Math.max(0, Number(message.line) || 0);
             debug('跳转到行: ' + line);

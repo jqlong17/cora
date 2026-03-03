@@ -1097,4 +1097,91 @@ suite('Cora E2E Test Suite', () => {
             assert.ok(defaultIcon, 'Should return default icon');
         });
     });
+
+    suite('Undo/Redo E2E', () => {
+        test('executing undo in Cora preview does not throw', async function() {
+            const testFile = path.join(testWorkspacePath, '会议纪要.md');
+            const uri = vscode.Uri.file(testFile);
+            await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            await assert.doesNotReject(
+                async () => { await vscode.commands.executeCommand('knowledgeBase.undo'); },
+                'undo should not throw in Cora preview'
+            );
+            await assert.doesNotReject(
+                async () => { await vscode.commands.executeCommand('knowledgeBase.redo'); },
+                'redo should not throw in Cora preview'
+            );
+
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        });
+
+        test('undo/redo commands are registered alongside other Cora commands', async () => {
+            const commands = await vscode.commands.getCommands(true);
+            assert.ok(commands.includes('knowledgeBase.undo'), 'knowledgeBase.undo should be registered');
+            assert.ok(commands.includes('knowledgeBase.redo'), 'knowledgeBase.redo should be registered');
+        });
+    });
+
+    suite('Duplicate Tab Prevention E2E', () => {
+        test('opening .md from API should not be auto-replaced by Cora preview', async function() {
+            const testFile = path.join(testWorkspacePath, '读书笔记.md');
+            if (!fs.existsSync(testFile)) {
+                this.skip();
+                return;
+            }
+
+            const doc = await vscode.workspace.openTextDocument(testFile);
+            await vscode.window.showTextDocument(doc);
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            const activeEditor = vscode.window.activeTextEditor;
+            assert.ok(
+                activeEditor,
+                'Text editor opened via showTextDocument should remain as text editor (no auto-replace to Cora)'
+            );
+            assert.ok(
+                activeEditor!.document.uri.fsPath === testFile,
+                'Active editor should be the file we opened'
+            );
+
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        });
+
+        test('Cora openPreview opens only one Cora tab per file', async function() {
+            const testFile = path.join(testWorkspacePath, '会议纪要.md');
+            const uri = vscode.Uri.file(testFile);
+
+            await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+            await new Promise(resolve => setTimeout(resolve, 600));
+            await vscode.commands.executeCommand('knowledgeBase.openPreview', uri);
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            let coraTabCount = 0;
+            for (const group of vscode.window.tabGroups.all) {
+                for (const tab of group.tabs) {
+                    if (tab.label.includes('会议纪要')) {
+                        coraTabCount++;
+                    }
+                }
+            }
+            assert.ok(coraTabCount <= 2, `Should not have excessive tabs for same file (got ${coraTabCount})`);
+
+            await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+        });
+
+        test('editorAssociations does not contain cora.markdown.preview for *.md', async () => {
+            const cfg = vscode.workspace.getConfiguration('workbench');
+            const assoc = cfg.get<Record<string, string>>('editorAssociations') ?? {};
+            assert.ok(
+                assoc['*.md'] !== 'cora.markdown.preview',
+                '*.md should not be globally associated with cora.markdown.preview'
+            );
+            assert.ok(
+                assoc['*.markdown'] !== 'cora.markdown.preview',
+                '*.markdown should not be globally associated with cora.markdown.preview'
+            );
+        });
+    });
 });

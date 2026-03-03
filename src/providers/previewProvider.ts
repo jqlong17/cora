@@ -264,6 +264,10 @@ export class PreviewProvider {
         this.panel.webview.postMessage({ command: 'openLocalFind' });
     }
 
+    postMessageToWebview(message: { command: string }): void {
+        this.panel?.webview.postMessage(message);
+    }
+
     /** 使指定 URI 的内容缓存失效（保存或文件变更时调用） */
     private clearContentCacheForUri(uri: vscode.Uri): void {
         this.contentCache.delete(uri.toString());
@@ -560,6 +564,7 @@ export class PreviewProvider {
         const extensionUri = this.context.extensionUri;
         const editorJsUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'editor.js'));
         const bundleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'milkdown.bundle.js'));
+        const historyBundleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'prosemirror-history.bundle.js'));
         const hasMermaid = this.containsMermaidBlock(markdown);
         const mermaidJsUri = hasMermaid ? webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'mermaid.min.js')) : '';
 
@@ -612,7 +617,7 @@ export class PreviewProvider {
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
+    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_HISTORY_BUNDLE__ = "${historyBundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
     <style>
         ${fontCss}
         body {

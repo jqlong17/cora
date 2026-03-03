@@ -49,6 +49,8 @@
   "cmd.openCoraPlanUsage": "CoraPlan 使用说明",
   "cmd.openCoraPlanPlan": "打开 Plan",
   "cmd.deleteCoraPlanPlan": "删除 Plan",
+  "cmd.undo": "撤销",
+  "cmd.redo": "重做",
   "config.filterMode.description": "页面树的文件过滤模式",
   "config.showHiddenFiles.description": "显示隐藏文件和文件夹（点号开头，.git 除外）",
   "config.filterMode.all": "显示所有文件",
