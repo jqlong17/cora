@@ -93,7 +93,8 @@ async function refreshPreviewIfOpen(previewProvider?: PreviewProvider): Promise<
 export async function selectFont(previewProvider?: PreviewProvider): Promise<void> {
     const config = vscode.workspace.getConfiguration('knowledgeBase');
     const currentFont = config.get<string>('fontFamily');
-    const currentFontSize = config.get<number>('fontSize', 15);
+    const currentFontSize = config.get<number>('fontSize', 13);
+    const currentFontSizePreview = config.get<number>('fontSizePreview', 15);
     const currentLineHeightPreview = config.get<number>('lineHeightPreview', 1.5);
     const currentLineHeightSource = config.get<number>('lineHeightSource', 1.6);
 
@@ -110,6 +111,12 @@ export async function selectFont(previewProvider?: PreviewProvider): Promise<voi
         label: `${s}px`,
         description: s === currentFontSize ? t('display.current') : undefined,
         key: 'fontSize',
+        value: s
+    }));
+    const sizePreviewItems: DisplaySettingItem[] = sizes.map((s) => ({
+        label: `${s}px`,
+        description: s === currentFontSizePreview ? t('display.current') : undefined,
+        key: 'fontSizePreview',
         value: s
     }));
 
@@ -136,6 +143,8 @@ export async function selectFont(previewProvider?: PreviewProvider): Promise<voi
     const items: (DisplaySettingItem | vscode.QuickPickItem)[] = [
         { label: t('display.fontFamily'), kind: vscode.QuickPickItemKind.Separator },
         ...fontItems,
+        { label: t('display.fontSizePreview'), kind: vscode.QuickPickItemKind.Separator },
+        ...sizePreviewItems,
         { label: t('display.fontSize'), kind: vscode.QuickPickItemKind.Separator },
         ...sizeItems,
         { label: t('display.lineHeightPreview'), kind: vscode.QuickPickItemKind.Separator },

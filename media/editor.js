@@ -901,6 +901,9 @@ async function initEditor() {
 
         const initialImageMap = typeof window.__CORA_IMAGE_MAP__ !== 'undefined' ? window.__CORA_IMAGE_MAP__ : {};
         setTimeout(() => applyImageMap(editorElement, initialImageMap), 100);
+        setTimeout(() => {
+            if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
+        }, 300);
 
         // 监听来自宿主的跳转指令
         window.addEventListener('message', event => {
@@ -916,6 +919,9 @@ async function initEditor() {
                 } else if (window.editor) {
                     window.editor.action(replaceAll(content));
                     setTimeout(() => applyImageMap(editorElement, imageMap || {}), 50);
+                    setTimeout(() => {
+                        if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
+                    }, 200);
                 }
                 if (findBar && findBar.style.display !== 'none') {
                     refreshFindMatches(true);

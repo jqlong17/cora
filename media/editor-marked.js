@@ -757,6 +757,9 @@
     if (editorEl) {
         editorEl.innerHTML = initialRendered;
         renderMermaidBlocks(editorEl);
+        setTimeout(function() {
+            if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorEl);
+        }, 50);
     }
 
     // 监听宿主消息
@@ -771,6 +774,9 @@
             if (typeof message.renderedHtml === 'string' && editorEl) {
                 editorEl.innerHTML = message.renderedHtml;
                 renderMermaidBlocks(editorEl);
+                setTimeout(function() {
+                    if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorEl);
+                }, 50);
             }
             if (findBar && findBar.style.display !== 'none') {
                 refreshFindMatches(true);

@@ -91,7 +91,8 @@
   "coraWiki.pythonError": "Python execution failed: {error}. How to fix?",
   "coraWiki.pythonRetry": "Retry",
   "config.fontFamily.description": "Font family for editor",
-  "config.fontSize.description": "Font size (px)",
+  "config.fontSize.description": "Font size in Markdown mode (px)",
+  "config.fontSizePreview.description": "Font size in preview mode (px)",
   "config.lineHeightPreview.description": "Line height in preview (multiplier)",
   "config.lineHeightSource.description": "Line height in Markdown (multiplier)"
 }

@@ -22,6 +22,9 @@ const zh: Messages = {
         copyPath: '复制绝对路径',
         copyRelativePath: '复制相对路径',
     },
+    view: {
+        pages: '页面',
+    },
     msg: {
         revealFailed: '无法在 Finder 中打开',
         copiedAbsolutePath: '已复制绝对路径到剪贴板',
@@ -113,7 +116,8 @@ const zh: Messages = {
     },
     display: {
         fontFamily: '字体系列',
-        fontSize: '字号',
+        fontSize: '字号（Markdown）',
+        fontSizePreview: '字号（预览）',
         lineHeightPreview: '行间距（预览）',
         lineHeightSource: '行间距（Markdown）',
         current: '当前',
@@ -186,6 +190,9 @@ const en: Messages = {
         openFile: 'Open File',
         copyPath: 'Copy Absolute Path',
         copyRelativePath: 'Copy Relative Path',
+    },
+    view: {
+        pages: 'Pages',
     },
     msg: {
         revealFailed: 'Failed to open in Finder',
@@ -278,7 +285,8 @@ const en: Messages = {
     },
     display: {
         fontFamily: 'Font family',
-        fontSize: 'Font size',
+        fontSize: 'Font size (Markdown)',
+        fontSizePreview: 'Font size (preview)',
         lineHeightPreview: 'Line height (Preview)',
         lineHeightSource: 'Line height (Markdown)',
         current: 'Current',

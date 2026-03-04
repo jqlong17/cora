@@ -91,7 +91,8 @@
   "coraWiki.pythonError": "Python 执行出错：{error}。如何解决？",
   "coraWiki.pythonRetry": "重试",
   "config.fontFamily.description": "编辑器使用的字体系列",
-  "config.fontSize.description": "编辑器使用的字体大小 (px)",
+  "config.fontSize.description": "Markdown 模式下的字体大小 (px)",
+  "config.fontSizePreview.description": "预览模式下的字体大小 (px)",
   "config.lineHeightPreview.description": "预览模式下行高（倍数）",
   "config.lineHeightSource.description": "Markdown 模式下行高（倍数）"
 }

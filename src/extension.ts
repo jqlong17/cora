@@ -13,6 +13,14 @@ import { registerCommands, ServiceContainer } from './commands/registerCommands'
 import { registerListeners, syncEditorAssociationsForPreviewOnClick } from './listeners/registerListeners';
 import { syncPageTreeViewLayoutContext } from './utils/pageTreeContext';
 import { CoraMarkdownEditorProvider, CORA_MARKDOWN_VIEW_TYPE } from './editors/coraMarkdownEditorProvider';
+import { t } from './utils/i18n';
+
+/** 页面树视图标题：有工作区时显示当前项目目录名（与 VS Code 资源管理器一致），否则显示「页面」/ Pages */
+function getPageTreeViewTitle(): string {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    return folder ? folder.name : t('view.pages');
+}
+
 export function activate(context: vscode.ExtensionContext) {
     console.log('Cora 插件已激活');
 
@@ -44,6 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: false,
         canSelectMany: true
     });
+    pageTreeView.title = getPageTreeViewTitle();
     pageTreeProvider.setTreeView(pageTreeView);
     const outlineTreeView = vscode.window.createTreeView('kbOutline', {
         treeDataProvider: outlineProvider,
@@ -111,9 +120,10 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // CoraPlan：工作区或 .cursor/plans 变化时刷新列表
+    // 工作区变化时：更新页面树标题（显示当前项目目录名）、刷新 CoraPlan
     context.subscriptions.push(
         vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            pageTreeView.title = getPageTreeViewTitle();
             void coraPlanProvider.refreshPlans(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
         })
     );

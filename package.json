@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "%extension.description%",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -689,10 +689,17 @@
         },
         "knowledgeBase.fontSize": {
           "type": "number",
-          "default": 15,
+          "default": 13,
           "minimum": 12,
           "maximum": 30,
           "description": "%config.fontSize.description%"
+        },
+        "knowledgeBase.fontSizePreview": {
+          "type": "number",
+          "default": 15,
+          "minimum": 12,
+          "maximum": 30,
+          "description": "%config.fontSizePreview.description%"
         },
         "knowledgeBase.lineHeightPreview": {
           "type": "number",

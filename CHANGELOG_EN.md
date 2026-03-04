@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.4] - 2026-03-04
+
+### Improved
+
+* **Table column width in preview**: Smarter table column width logic in preview; column widths now auto-adjust based on content length; improved display font size.
+
 ## \[0.2.3] - 2026-03-03
 
 ### Added

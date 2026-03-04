@@ -438,7 +438,8 @@ export class PreviewProvider {
         const nonce = this.getNonce();
         const config = vscode.workspace.getConfiguration('knowledgeBase');
         const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
-        const fontSize = config.get<number>('fontSize', 15);
+        const fontSize = config.get<number>('fontSize', 13);
+        const fontSizePreview = config.get<number>('fontSizePreview', 15);
         const lineHeightPreview = config.get<number>('lineHeightPreview', 1.5);
         const lineHeightSource = config.get<number>('lineHeightSource', 1.6);
 
@@ -499,17 +500,45 @@ export class PreviewProvider {
         .mode-tab.active { background: #1a00ff; color: #fff; }
         .mode-tab:not(.active):hover { background: #e0e0e0; }
         .content-area { margin-top: 48px; height: calc(100vh - 48px); overflow: auto; }
-        #marked-preview { max-width: 860px; margin: 0 auto; padding: 20px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; line-height: ${lineHeightPreview} !important; }
-        /* 表格：表头浅灰底、常规字重、底部分隔线；数据行白底，链接蓝色下划线 */
-        #marked-preview table { border-collapse: collapse; width: 100%; margin: 16px 0; border: 1px solid var(--vscode-widget-border, #e1e4e8); font-size: 14px; background: var(--vscode-editor-background, #fff); }
-        #marked-preview thead th { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); color: var(--vscode-editor-foreground, #24292f); font-weight: normal; border: 1px solid var(--vscode-widget-border, #e1e4e8); border-bottom: 1px solid var(--vscode-widget-border, #e1e4e8); padding: 8px 12px; text-align: left; }
-        #marked-preview tbody td { border: 1px solid var(--vscode-widget-border, #e1e4e8); padding: 8px 12px; text-align: left; background: var(--vscode-editor-background, #fff); }
-        #marked-preview tbody td a { color: #0969da; text-decoration: underline; }
-        #marked-preview img { max-width: 100%; height: auto; }
-        /* 代码块：浅灰底、圆角、等宽字体、保留空格与换行以正确显示 ASCII 树 */
-        #marked-preview pre { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); border-radius: 6px; padding: 12px 16px; margin: 16px 0; overflow: auto; line-height: 1.45; border: 1px solid var(--vscode-widget-border, #e1e4e8); white-space: pre; }
+        #marked-preview { max-width: 860px; margin: 0 auto; padding: 20px 32px; font-family: ${targetFontFamily} !important; font-size: ${fontSizePreview}px !important; line-height: ${lineHeightPreview} !important; }
+        /* 标题 */
+        #marked-preview h1 { font-size: 1.8em; font-weight: 600; margin: 2em 0 0.4em; padding-bottom: 0.25em; border-bottom: 1px solid var(--vscode-widget-border, #e5e7eb); line-height: 1.25; }
+        #marked-preview h1:first-child { margin-top: 0; }
+        #marked-preview h2 { font-size: 1.4em; font-weight: 600; margin: 1.6em 0 0.35em; line-height: 1.3; }
+        #marked-preview h3 { font-size: 1.15em; font-weight: 600; margin: 1.3em 0 0.3em; line-height: 1.35; }
+        #marked-preview h4 { font-size: 1em; font-weight: 600; margin: 1.1em 0 0.25em; line-height: 1.4; }
+        #marked-preview h5 { font-size: 0.9em; font-weight: 600; margin: 1em 0 0.2em; line-height: 1.4; color: var(--vscode-descriptionForeground, #656d76); }
+        #marked-preview h6 { font-size: 0.85em; font-weight: 600; margin: 1em 0 0.2em; line-height: 1.4; color: var(--vscode-descriptionForeground, #656d76); }
+        /* 段落与列表 */
+        #marked-preview p { margin: 0.6em 0; }
+        #marked-preview ul, #marked-preview ol { margin: 0.4em 0; padding-left: 1.8em; }
+        #marked-preview li { margin: 0.15em 0; }
+        #marked-preview li > p { margin: 0.25em 0; }
+        /* 引用块 */
+        #marked-preview blockquote { margin: 0.8em 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--vscode-widget-border, #d1d5db); color: var(--vscode-descriptionForeground, #656d76); }
+        #marked-preview blockquote p { margin: 0.3em 0; }
+        /* 分隔线 */
+        #marked-preview hr { border: none; border-top: 1px solid var(--vscode-widget-border, #e5e7eb); margin: 1.5em 0; }
+        /* 链接 */
+        #marked-preview a { color: #0969da; text-decoration: none; }
+        #marked-preview a:hover { text-decoration: underline; }
+        /* 图片 */
+        #marked-preview img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; }
+        /* 表格 */
+        #marked-preview table { border-collapse: collapse; table-layout: auto; width: auto; max-width: 100%; min-width: 50%; margin: 1em 0; font-size: 15px; line-height: 1.4; background: var(--vscode-editor-background, #fff); border: 1px solid var(--vscode-widget-border, #e5e7eb); }
+        #marked-preview thead th { background: rgba(0,0,0,0.025); color: var(--vscode-editor-foreground, #24292f); font-weight: 500; font-size: 15px; letter-spacing: 0.02em; white-space: nowrap; border: 1px solid var(--vscode-widget-border, #e5e7eb); padding: 6px 12px; text-align: left; }
+        #marked-preview tbody td { border: 1px solid var(--vscode-widget-border, #e5e7eb); padding: 2px 12px; text-align: left; background: var(--vscode-editor-background, #fff); }
+        #marked-preview tbody tr:hover td { background: var(--vscode-list-hoverBackground, rgba(0,0,0,0.02)); }
+        #marked-preview tbody td a { color: #0969da; text-decoration: none; word-break: break-all; }
+        #marked-preview tbody td a:hover { text-decoration: underline; }
+        #marked-preview tbody td code { font-size: 15px; padding: 1px 5px; border-radius: 3px; background: var(--vscode-editor-inactiveSelectionBackground, #f3f4f6); }
+        /* 代码块 */
+        #marked-preview pre { background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); border-radius: 6px; padding: 12px 16px; margin: 1em 0; overflow: auto; line-height: 1.45; border: 1px solid var(--vscode-widget-border, #e1e4e8); white-space: pre; }
         #marked-preview pre code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; background: transparent; padding: 0; color: var(--vscode-editor-foreground, #24292f); white-space: pre; }
         #marked-preview code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em; background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa); padding: 2px 6px; border-radius: 4px; }
+        /* 加粗与强调 */
+        #marked-preview strong { font-weight: 600; }
+        #marked-preview em { font-style: italic; }
         #source-editor-container { width: 100%; height: 100%; display: none; background: var(--vscode-editor-background); }
         .source-editor-wrapper { display: flex; width: 100%; height: 100%; }
         .source-line-numbers { width: 4em; min-width: 4em; padding: 20px 14px 20px 16px; font-family: ${targetFontFamily} !important; font-size: ${fontSize}px !important; line-height: ${lineHeightSource}; color: var(--vscode-editorLineNumber-foreground, #6e7681); text-align: right; user-select: none; overflow-y: auto; overflow-x: hidden; border-right: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.1)); white-space: pre; box-sizing: border-box; }
@@ -543,6 +572,7 @@ export class PreviewProvider {
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
     <script nonce="${nonce}">${mermaidScript}</script>
+    <script nonce="${nonce}">${this.getTableLayoutScript()}</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
 </html>`;
@@ -572,7 +602,8 @@ export class PreviewProvider {
 
         const config = vscode.workspace.getConfiguration('knowledgeBase');
         const fontFamily = config.get<string>('fontFamily', 'Cascadia Mono');
-        const fontSize = config.get<number>('fontSize', 15);
+        const fontSize = config.get<number>('fontSize', 13);
+        const fontSizePreview = config.get<number>('fontSizePreview', 15);
         const lineHeightPreview = config.get<number>('lineHeightPreview', 1.5);
         const lineHeightSource = config.get<number>('lineHeightSource', 1.6);
 
@@ -641,7 +672,7 @@ export class PreviewProvider {
         .milkdown {
             box-shadow: none !important;
             background: transparent !important;
-            font-size: ${fontSize}px !important; /* 应用动态字号 */
+            font-size: ${fontSizePreview}px !important; /* 预览模式字号 */
             border: none !important;
             outline: none !important;
         }
@@ -655,32 +686,80 @@ export class PreviewProvider {
         .milkdown .editor:focus {
             outline: none !important;
         }
-        /* 表格样式 - 表头浅灰底、常规字重、底部分隔线；数据行白底，链接蓝色下划线 */
+        /* 标题 */
+        .milkdown h1 { font-size: 1.8em; font-weight: 600; margin: 2em 0 0.4em; padding-bottom: 0.25em; border-bottom: 1px solid var(--vscode-widget-border, #e5e7eb); line-height: 1.25; }
+        .milkdown h1:first-child { margin-top: 0; }
+        .milkdown h2 { font-size: 1.4em; font-weight: 600; margin: 1.6em 0 0.35em; line-height: 1.3; }
+        .milkdown h3 { font-size: 1.15em; font-weight: 600; margin: 1.3em 0 0.3em; line-height: 1.35; }
+        .milkdown h4 { font-size: 1em; font-weight: 600; margin: 1.1em 0 0.25em; line-height: 1.4; }
+        .milkdown h5 { font-size: 0.9em; font-weight: 600; margin: 1em 0 0.2em; line-height: 1.4; color: var(--vscode-descriptionForeground, #656d76); }
+        .milkdown h6 { font-size: 0.85em; font-weight: 600; margin: 1em 0 0.2em; line-height: 1.4; color: var(--vscode-descriptionForeground, #656d76); }
+        /* 段落与列表 */
+        .milkdown p { margin: 0.6em 0; }
+        .milkdown ul, .milkdown ol { margin: 0.4em 0; padding-left: 1.8em; }
+        .milkdown li { margin: 0.15em 0; }
+        .milkdown li > p { margin: 0.25em 0; }
+        /* 引用块 */
+        .milkdown blockquote { margin: 0.8em 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--vscode-widget-border, #d1d5db); color: var(--vscode-descriptionForeground, #656d76); }
+        .milkdown blockquote p { margin: 0.3em 0; }
+        /* 分隔线 */
+        .milkdown hr { border: none; border-top: 1px solid var(--vscode-widget-border, #e5e7eb); margin: 1.5em 0; }
+        /* 链接 */
+        .milkdown a { color: #0969da; text-decoration: none; }
+        .milkdown a:hover { text-decoration: underline; }
+        /* 图片 */
+        .milkdown img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; }
+        /* 加粗与强调 */
+        .milkdown strong { font-weight: 600; }
+        .milkdown em { font-style: italic; }
+        /* 表格 */
         .milkdown table {
             border-collapse: collapse;
-            width: 100%;
+            table-layout: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
             margin: 16px 0;
-            border: 1px solid var(--vscode-widget-border, #e1e4e8);
-            font-size: 14px;
-            line-height: 1.35;
+            border: 1px solid var(--vscode-widget-border, #e5e7eb);
+            font-size: 15px;
+            line-height: 1.4;
             background: var(--vscode-editor-background, #fff) !important;
         }
+        .milkdown table colgroup col { width: 0 !important; min-width: 0 !important; }
         .milkdown th, .milkdown td {
-            border: 1px solid var(--vscode-widget-border, #e1e4e8);
-            padding: 8px 12px;
+            border: 1px solid var(--vscode-widget-border, #e5e7eb);
+            padding: 2px 12px;
             text-align: left;
+            width: auto !important;
+            min-width: 0 !important;
         }
         .milkdown th {
-            font-weight: normal;
-            background: var(--vscode-editor-inactiveSelectionBackground, #f6f8fa) !important;
+            font-weight: 500;
+            font-size: 15px;
+            letter-spacing: 0.02em;
+            white-space: nowrap !important;
+            background: rgba(0,0,0,0.025) !important;
             color: var(--vscode-editor-foreground, #24292f);
+            padding: 6px 12px;
         }
         .milkdown td {
             background: var(--vscode-editor-background, #fff) !important;
         }
+        .milkdown tbody tr:hover td {
+            background: var(--vscode-list-hoverBackground, rgba(0,0,0,0.02)) !important;
+        }
         .milkdown td a {
             color: #0969da;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .milkdown td a:hover {
             text-decoration: underline;
+        }
+        .milkdown td code {
+            font-size: 15px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: var(--vscode-editor-inactiveSelectionBackground, #f3f4f6);
         }
         /* 代码块 - 浅灰底、圆角、等宽字体、内边距与行高 */
         .milkdown pre {
@@ -868,9 +947,76 @@ export class PreviewProvider {
     </div>
 
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
+    <script nonce="${nonce}">${this.getTableLayoutScript()}</script>
     <script type="module" nonce="${nonce}" src="${editorJsUri}"></script>
 </body>
 </html>`;
+    }
+
+    private getTableLayoutScript(): string {
+        return `
+(function() {
+    var SHORT = 16;
+    function dw(t) { var n=0; for(var i=0;i<t.length;i++) n += t.charCodeAt(i)>0x7f?2:1; return n; }
+
+    function optimizeTable(table) {
+        var rows = table.querySelectorAll('tr');
+        if (!rows.length) return;
+        var cc = rows[0].querySelectorAll('th,td').length;
+        if (cc < 2) return;
+
+        var mw = [];
+        for (var c = 0; c < cc; c++) {
+            var mx = 0;
+            rows.forEach(function(r) {
+                var cell = r.querySelectorAll('th,td')[c];
+                if (cell) { var v = dw((cell.textContent||'').trim()); if(v>mx) mx=v; }
+            });
+            mw.push(mx);
+        }
+
+        var hasLong = mw.some(function(v) { return v > SHORT; });
+        if (!hasLong) return;
+
+        rows.forEach(function(r) {
+            var cells = r.querySelectorAll('th,td');
+            for (var c = 0; c < cc && c < cells.length; c++) {
+                if (mw[c] <= SHORT) {
+                    cells[c].style.setProperty('white-space','nowrap','important');
+                }
+            }
+        });
+    }
+
+    var OBS_OPTS = { childList: true, subtree: true };
+
+    function optimizeAll(container) {
+        if (!container) return;
+        try {
+            var obs = container._coraTableObs;
+            if (obs) obs.disconnect();
+            var tables = container.querySelectorAll('table');
+            tables.forEach(function(t) { optimizeTable(t); });
+            if (obs) obs.observe(container, OBS_OPTS);
+        } catch(e) { console.error('[Cora] table optimize error:', e); }
+    }
+
+    var _timer = null;
+    function scheduleOptimize(container) {
+        if (_timer) clearTimeout(_timer);
+        _timer = setTimeout(function() { _timer = null; optimizeAll(container); }, 150);
+    }
+
+    window.__coraOptimizeTableLayout = function(container) {
+        optimizeAll(container);
+
+        if (container && !container._coraTableObs) {
+            var obs = new MutationObserver(function() { scheduleOptimize(container); });
+            obs.observe(container, OBS_OPTS);
+            container._coraTableObs = obs;
+        }
+    };
+})();`;
     }
 
     private getErrorHtml(message: string): string {
