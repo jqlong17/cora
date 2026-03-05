@@ -1,5 +1,18 @@
 # Changelog
 
+## \[0.2.5] - 2026-03-05
+
+### Added
+
+* **Paste image**: When pasting a clipboard image in preview or Markdown mode, a custom dialog lets you set save path/filename and insert mode (reference file or Base64) in one step. Default save location is `images/` under the current .md directory, with default name `image-YYYYMMDD-NNN.png`. The file is always saved to `images/` regardless of insert mode. In preview, hovering over an image shows options to switch between “Reference file” and “Base64 inline”.
+
+* **Locate in page tree**: In flat view, right-click an .md file to use “Locate in page tree” (below “Reveal in Finder”). Switches to tree view, expands the file’s parent folder path, and scrolls to and selects that node.
+
+### Improved
+
+* **Preview copy button and top bar styling**: Copy button moved to the left of the preview top bar; copy and Preview/Markdown tabs use muted gray styling; active tab uses a slightly darker gray instead of blue.
+* **Page tree getParent cache**: In tree mode, nodes are cached by path so `reveal` correctly expands the parent folder path.
+
 ## \[0.2.4] - 2026-03-04
 
 ### Improved

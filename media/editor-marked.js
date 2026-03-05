@@ -32,6 +32,7 @@
     const lineNumbersEl = document.getElementById('source-line-numbers');
     const tabVisual = document.getElementById('tab-visual');
     const tabSource = document.getElementById('tab-source');
+    const copyPreviewBtn = document.getElementById('cora-copy-preview-btn');
     const contentArea = document.querySelector('.content-area');
     let findBar = null;
     let findInput = null;
@@ -315,6 +316,7 @@
         sourceContainer.style.display = 'block';
         tabVisual.classList.remove('active');
         tabSource.classList.add('active');
+        if (copyPreviewBtn) copyPreviewBtn.style.display = 'none';
         placeSourceCursorToLine(lineIdx);
         if (findBar && findBar.style.display !== 'none') {
             refreshFindMatches(true);
@@ -332,6 +334,7 @@
         previewContainer.style.visibility = 'hidden';
         tabSource.classList.remove('active');
         tabVisual.classList.add('active');
+        if (copyPreviewBtn) copyPreviewBtn.style.display = '';
         scrollPreviewToLine(lineIdx, { immediate: true });
         if (findBar && findBar.style.display !== 'none') {
             refreshFindMatches(true);
@@ -473,6 +476,32 @@
         scrollHost.scrollTop = Math.round(maxScroll * ratio);
     }
 
+    function copyPreviewToClipboard() {
+        if (!editorEl || typeof navigator === 'undefined' || !navigator.clipboard || !navigator.clipboard.write) return;
+        var clone = editorEl.cloneNode(true);
+        [].slice.call(clone.querySelectorAll('script')).forEach(function (s) { s.remove(); });
+        var html = clone.innerHTML.replace(/<\/?script\b[^>]*>/gi, '');
+        var plain = (editorEl.innerText || editorEl.textContent || '').trim();
+        if (!html && !plain) return;
+        var copiedLabel = copyPreviewBtn && copyPreviewBtn.getAttribute('data-copied') ? copyPreviewBtn.getAttribute('data-copied') : '已复制';
+        var origText = copyPreviewBtn ? copyPreviewBtn.textContent : '';
+        navigator.clipboard.write([
+            new ClipboardItem({
+                'text/html': new Blob([html], { type: 'text/html;charset=utf-8' }),
+                'text/plain': new Blob([plain], { type: 'text/plain;charset=utf-8' })
+            })
+        ]).then(function () {
+            if (copyPreviewBtn) {
+                copyPreviewBtn.textContent = copiedLabel;
+                setTimeout(function () { copyPreviewBtn.textContent = origText; }, 1500);
+            }
+        }).catch(function () { });
+    }
+
+    if (copyPreviewBtn) {
+        copyPreviewBtn.addEventListener('click', function () { copyPreviewToClipboard(); });
+    }
+
     tabSource.addEventListener('click', switchToSource);
     tabVisual.addEventListener('click', switchToVisual);
 
@@ -501,6 +530,47 @@
     const debouncedUpdate = debounce((markdown) => {
         vscode.postMessage({ command: 'editorUpdate', content: markdown });
     }, 300);
+
+    var pendingPasteImage = null;
+    function insertMarkdownAtOffset(snippet, offset) {
+        var val = textarea.value;
+        var start = Math.max(0, Math.min(offset, val.length));
+        var newVal = val.slice(0, start) + snippet + val.slice(start);
+        textarea.value = newVal;
+        textarea.setSelectionRange(start + snippet.length, start + snippet.length);
+        updateSourceLineNumbers();
+        debouncedUpdate(textarea.value);
+    }
+    document.addEventListener('paste', function (e) {
+        if (!vscode || !e.clipboardData || !e.clipboardData.items) return;
+        var item = null;
+        for (var i = 0; i < e.clipboardData.items.length; i++) {
+            if (e.clipboardData.items[i].type.indexOf('image/') === 0) {
+                item = e.clipboardData.items[i];
+                break;
+            }
+        }
+        if (!item) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var file = item.getAsFile();
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+            var dataUrl = reader.result;
+            if (typeof dataUrl !== 'string' || dataUrl.indexOf('base64,') === -1) return;
+            var base64 = dataUrl.split('base64,')[1];
+            var mimeType = (file.type || 'image/png').toLowerCase();
+            pendingPasteImage = { base64: base64, mimeType: mimeType };
+            vscode.postMessage({
+                command: 'pasteImage',
+                documentUri: window.__CORA_DOCUMENT_URI__,
+                imageDataBase64: base64,
+                mimeType: mimeType
+            });
+        };
+        reader.readAsDataURL(file);
+    }, true);
 
     textarea.addEventListener('input', function () {
         updateSourceLineNumbers();
@@ -751,12 +821,60 @@
         })();
     }
 
+    var pendingImageReplace = null;
+
+    function wrapImagesWithInsertOptions(container) {
+        if (!container || !vscode) return;
+        var labels = window.__CORA_IMAGE_INSERT_LABELS__ || { ref: '引用文件', base64: 'Base64' };
+        var imgs = container.querySelectorAll('img');
+        imgs.forEach(function (img) {
+            if (img.closest && img.closest('.cora-image-wrap')) return;
+            var wrap = document.createElement('div');
+            wrap.className = 'cora-image-wrap';
+            var actions = document.createElement('div');
+            actions.className = 'cora-image-actions';
+            var btnRef = document.createElement('button');
+            btnRef.type = 'button';
+            btnRef.textContent = labels.ref || '引用文件';
+            var btnBase64 = document.createElement('button');
+            btnBase64.type = 'button';
+            btnBase64.textContent = labels.base64 || 'Base64';
+            var src = (img.getAttribute('src') || '').trim();
+            var dataSrc = (img.getAttribute('data-cora-src') || '').trim();
+            var isDataUrl = src.indexOf('data:') === 0;
+            var oldPattern = '![](' + (isDataUrl ? src : dataSrc || src) + ')';
+            btnRef.addEventListener('click', function () {
+                if (isDataUrl) {
+                    var base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
+                    var mime = (src.match(/^data:([^;]+);/) || [])[1] || 'image/png';
+                    if (base64) {
+                        pendingImageReplace = { oldPattern: oldPattern, kind: 'ref' };
+                        vscode.postMessage({ command: 'imageSwitchToRef', documentUri: window.__CORA_DOCUMENT_URI__, imageDataBase64: base64 });
+                    }
+                }
+            });
+            btnBase64.addEventListener('click', function () {
+                if (dataSrc || (!isDataUrl && src)) {
+                    var pathToUse = dataSrc || src;
+                    pendingImageReplace = { oldPattern: oldPattern, kind: 'base64' };
+                    vscode.postMessage({ command: 'imageSwitchToBase64', documentUri: window.__CORA_DOCUMENT_URI__, path: pathToUse });
+                }
+            });
+            actions.appendChild(btnRef);
+            actions.appendChild(btnBase64);
+            img.parentNode.insertBefore(wrap, img);
+            wrap.appendChild(img);
+            wrap.appendChild(actions);
+        });
+    }
+
     // 初始化内容
     textarea.value = initialContent;
     updateSourceLineNumbers();
     if (editorEl) {
         editorEl.innerHTML = initialRendered;
         renderMermaidBlocks(editorEl);
+        wrapImagesWithInsertOptions(editorEl);
         setTimeout(function() {
             if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorEl);
         }, 50);
@@ -766,6 +884,7 @@
     window.addEventListener('message', function (event) {
         const message = event.data;
         if (message.command === 'updateContent') {
+            if (typeof message.uri === 'string') window.__CORA_DOCUMENT_URI__ = message.uri;
             const content = message.content;
             if (typeof content === 'string') {
                 textarea.value = content;
@@ -774,6 +893,7 @@
             if (typeof message.renderedHtml === 'string' && editorEl) {
                 editorEl.innerHTML = message.renderedHtml;
                 renderMermaidBlocks(editorEl);
+                wrapImagesWithInsertOptions(editorEl);
                 setTimeout(function() {
                     if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorEl);
                 }, 50);
@@ -782,6 +902,64 @@
                 refreshFindMatches(true);
             }
             debug('收到热更新内容');
+            return;
+        }
+        if (message.command === 'pasteImageResult') {
+            if (message.error) {
+                pendingPasteImage = null;
+                return;
+            }
+            var pathForRef = message.pathForRef;
+            var insertAs = message.insertAs;
+            var snippet;
+            if (insertAs === 'ref' && pathForRef) {
+                snippet = '![](' + pathForRef + ')';
+            } else if (insertAs === 'base64' && pendingPasteImage) {
+                snippet = '![](data:' + pendingPasteImage.mimeType + ';base64,' + pendingPasteImage.base64 + ')';
+            } else {
+                pendingPasteImage = null;
+                return;
+            }
+            var offset = isSourceMode ? textarea.selectionStart : textarea.value.length;
+            insertMarkdownAtOffset(snippet, offset);
+            pendingPasteImage = null;
+            return;
+        }
+        if (message.command === 'imageSwitchToRefResult') {
+            if (message.error || !pendingImageReplace || pendingImageReplace.kind !== 'ref') {
+                pendingImageReplace = null;
+                return;
+            }
+            var pathForRef = message.pathForRef;
+            if (!pathForRef) { pendingImageReplace = null; return; }
+            var content = textarea.value;
+            var idx = content.indexOf(pendingImageReplace.oldPattern);
+            if (idx !== -1) {
+                var newSnippet = '![](' + pathForRef + ')';
+                textarea.value = content.slice(0, idx) + newSnippet + content.slice(idx + pendingImageReplace.oldPattern.length);
+                updateSourceLineNumbers();
+                debouncedUpdate(textarea.value);
+            }
+            pendingImageReplace = null;
+            return;
+        }
+        if (message.command === 'imageSwitchToBase64Result') {
+            if (message.error || !pendingImageReplace || pendingImageReplace.kind !== 'base64') {
+                pendingImageReplace = null;
+                return;
+            }
+            var b64 = message.imageDataBase64;
+            var mime = message.mimeType || 'image/png';
+            if (!b64) { pendingImageReplace = null; return; }
+            var content = textarea.value;
+            var idx = content.indexOf(pendingImageReplace.oldPattern);
+            if (idx !== -1) {
+                var newSnippet = '![](data:' + mime + ';base64,' + b64 + ')';
+                textarea.value = content.slice(0, idx) + newSnippet + content.slice(idx + pendingImageReplace.oldPattern.length);
+                updateSourceLineNumbers();
+                debouncedUpdate(textarea.value);
+            }
+            pendingImageReplace = null;
             return;
         }
         if (message.command === 'openLocalFind') {

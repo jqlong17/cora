@@ -51,6 +51,8 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
     readonly onDidChangeTreeData: vscode.Event<PageTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private treeView: vscode.TreeView<PageTreeItem> | undefined;
+    /** 树状模式下 path -> PageTreeItem 缓存，使 getParent 返回与 getChildren 同一实例，reveal 才能正确展开路径 */
+    private nodeCacheByPath = new Map<string, PageTreeItem>();
 
     constructor(
         private fileService: FileService,
@@ -64,6 +66,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
 
     refresh(): void {
         this.fileService.clearFlatListCache();
+        this.nodeCacheByPath.clear();
         this._onDidChangeTreeData.fire();
     }
 
@@ -169,6 +172,7 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
                 treeItem.contextValue = 'file+favorite';
                 treeItem.iconPath = new vscode.ThemeIcon('star-empty');
             }
+            this.nodeCacheByPath.set(path.normalize(item.uri.fsPath), treeItem);
             return treeItem;
         });
     }
@@ -178,19 +182,56 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
         if (pageViewMode === 'flat' || pageViewMode === 'favorites') {
             return null;
         }
-        const parentPath = element.item.uri.fsPath.split('/').slice(0, -1).join('/');
-        if (!parentPath) {
+        const parentPath = path.normalize(path.dirname(element.item.uri.fsPath));
+        if (!parentPath || parentPath === '.' || parentPath === element.item.uri.fsPath) {
             return null;
         }
-
+        const cached = this.nodeCacheByPath.get(parentPath);
+        if (cached) {
+            return cached;
+        }
         const parentUri = vscode.Uri.file(parentPath);
         const parentItem: FileItem = {
             uri: parentUri,
             type: 'directory',
-            name: parentPath.split('/').pop() || ''
+            name: path.basename(parentPath)
         };
-
         return new PageTreeItem(parentItem, vscode.TreeItemCollapsibleState.Expanded);
+    }
+
+    /** 在树状模式下根据文件 URI 查找对应节点，并返回从根到该文件父文件夹的祖先链（同一批 getChildren 实例），供 reveal 展开用 */
+    async findItemByUriWithAncestors(uri: vscode.Uri): Promise<{ node: PageTreeItem; ancestors: PageTreeItem[] } | undefined> {
+        if (this.configService.getPageViewMode() !== 'tree') return undefined;
+        const target = path.normalize(uri.fsPath);
+        const ancestors: PageTreeItem[] = [];
+        const visit = async (element?: PageTreeItem): Promise<PageTreeItem | undefined> => {
+            const children = await this.getChildren(element);
+            for (const child of children) {
+                if (child.item.type === 'file' && path.normalize(child.item.uri.fsPath) === target) return child;
+                if (child.item.type === 'directory') {
+                    const found = await visit(child);
+                    if (found) {
+                        ancestors.push(child);
+                        return found;
+                    }
+                }
+            }
+            return undefined;
+        };
+        const node = await visit();
+        if (!node) return undefined;
+        ancestors.reverse();
+        return { node, ancestors };
+    }
+
+    /** 在树状模式下根据文件 URI 查找对应节点，供「在页面树中定位」使用 */
+    async findItemByUri(uri: vscode.Uri): Promise<PageTreeItem | undefined> {
+        const result = await this.findItemByUriWithAncestors(uri);
+        return result?.node;
+    }
+
+    getTreeView(): vscode.TreeView<PageTreeItem> | undefined {
+        return this.treeView;
     }
 
     async expandAll(): Promise<void> {

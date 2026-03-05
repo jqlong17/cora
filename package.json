@@ -2,7 +2,7 @@
   "name": "cora",
   "displayName": "Cora",
   "description": "%extension.description%",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "jqlong",
   "icon": "images/icon.png",
   "license": "MIT",
@@ -190,6 +190,11 @@
         "command": "knowledgeBase.revealInFinder",
         "title": "%cmd.revealInFinder%",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "knowledgeBase.locateInPageTree",
+        "title": "%cmd.locateInPageTree%",
+        "icon": "$(location)"
       },
       {
         "command": "knowledgeBase.copyPath",
@@ -444,6 +449,11 @@
           "command": "knowledgeBase.revealInFinder",
           "when": "view == pageTree",
           "group": "4_file@1"
+        },
+        {
+          "command": "knowledgeBase.locateInPageTree",
+          "when": "view == pageTree && (viewItem == file || viewItem == file+favorite) && coraPageTreeViewLayout == 'flat'",
+          "group": "4_file@2"
         },
         {
           "command": "knowledgeBase.copyPath",

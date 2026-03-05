@@ -175,6 +175,16 @@ export class PreviewProvider {
                         if (this.currentUri?.toString() === uriToSave.toString()) {
                             this.lastSavedContent = contentToSave;
                         }
+                        if (this.panel && this.currentUri?.toString() === uriToSave.toString() && this.currentPreviewMode === 'marked') {
+                            let html = marked.parse(contentToSave) as string;
+                            html = this.rewriteHtmlImageUrls(html, uriToSave, this.panel.webview);
+                            this.panel.webview.postMessage({
+                                command: 'updateContent',
+                                content: contentToSave,
+                                uri: uriToSave.toString(),
+                                renderedHtml: this.sanitizeHtml(html)
+                            });
+                        }
                     } catch (e) {
                         console.error('Auto-save failed:', e);
                     }
@@ -188,6 +198,35 @@ export class PreviewProvider {
                 this.addLocationToChat(startLine, endLine, text).catch((e) => {
                     console.error('[Cora] Add to Chat failed:', e);
                 });
+                return;
+            }
+
+            if (msg.command === 'pasteImage') {
+                this.handlePasteImage(msg).catch((e) => {
+                    console.error('[Cora] pasteImage failed:', e);
+                    this.panel?.webview.postMessage({ command: 'pasteImageResult', error: String(e) });
+                });
+                return;
+            }
+
+            if (msg.command === 'imageSwitchToRef') {
+                this.handleImageSwitchToRef(msg).then((result) => {
+                    if (result) this.panel?.webview.postMessage({ command: 'imageSwitchToRefResult', ...result });
+                }).catch((e) => {
+                    console.error('[Cora] imageSwitchToRef failed:', e);
+                    this.panel?.webview.postMessage({ command: 'imageSwitchToRefResult', error: String(e) });
+                });
+                return;
+            }
+
+            if (msg.command === 'imageSwitchToBase64') {
+                this.handleImageSwitchToBase64(msg).then((result) => {
+                    if (result) this.panel?.webview.postMessage({ command: 'imageSwitchToBase64Result', ...result });
+                }).catch((e) => {
+                    console.error('[Cora] imageSwitchToBase64 failed:', e);
+                    this.panel?.webview.postMessage({ command: 'imageSwitchToBase64Result', error: String(e) });
+                });
+                return;
             }
         });
 
@@ -356,6 +395,204 @@ export class PreviewProvider {
         }
     }
 
+    /** 建议默认图片保存路径：当前 .md 同目录下 images/image-YYYYMMDD-NNN.png，避免覆盖 */
+    private async suggestDefaultImagePath(documentUri: vscode.Uri): Promise<string> {
+        const docDir = path.dirname(documentUri.fsPath);
+        const imagesDir = path.join(docDir, 'images');
+        const today = new Date();
+        const dateStr = today.getFullYear() +
+            String(today.getMonth() + 1).padStart(2, '0') +
+            String(today.getDate()).padStart(2, '0');
+        const prefix = `image-${dateStr}-`;
+        let maxN = 0;
+        try {
+            if (!fs.existsSync(imagesDir)) return `images/${prefix}001.png`;
+            const names = await fs.promises.readdir(imagesDir);
+            for (const name of names) {
+                const m = name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)\\.(png|jpe?g|gif|webp)$`, 'i'));
+                if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+            }
+        } catch { /* ignore */ }
+        const nextN = String(maxN + 1).padStart(3, '0');
+        return `images/${prefix}${nextN}.png`;
+    }
+
+    private getPasteImageDialogHtml(suggestedPath: string): string {
+        const title = t('preview.pasteImageTitle');
+        const pathPrompt = t('preview.pasteImagePathPrompt');
+        const pathPlaceholder = t('preview.pasteImagePathPlaceholder');
+        const insertPrompt = t('preview.pasteImageInsertTypePrompt');
+        const refLabel = t('preview.pasteImageInsertTypeRef');
+        const base64Label = t('preview.pasteImageInsertTypeBase64');
+        const confirmLabel = t('preview.pasteImageConfirm');
+        const cancelLabel = t('preview.pasteImageCancel');
+        const escapedPath = suggestedPath.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        return `<!DOCTYPE html>
+<html lang="${htmlLang()}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: var(--vscode-font-family); font-size: 13px; color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; padding: 20px; }
+        h2 { margin: 0 0 16px 0; font-size: 16px; font-weight: 600; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; margin-bottom: 4px; color: var(--vscode-input-foreground); }
+        .field input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 13px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; }
+        .field input[type="text"]:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+        .radio-group { display: flex; flex-direction: column; gap: 8px; }
+        .radio-group label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .radio-group input { margin: 0; }
+        .actions { margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end; }
+        .actions button { padding: 6px 14px; font-size: 13px; border-radius: 4px; cursor: pointer; border: 1px solid var(--vscode-button-border); }
+        .actions button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+        .actions button.primary:hover { background: var(--vscode-button-hoverBackground); }
+        .actions button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+        .actions button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+        .error { font-size: 12px; color: var(--vscode-errorForeground); margin-top: 4px; display: none; }
+    </style>
+</head>
+<body>
+    <h2>${title.replace(/</g, '&lt;')}</h2>
+    <form id="form">
+        <div class="field">
+            <label for="path">${pathPrompt.replace(/</g, '&lt;')}</label>
+            <input type="text" id="path" name="path" value="${escapedPath}" placeholder="${pathPlaceholder.replace(/"/g, '&quot;')}" autocomplete="off" />
+            <div class="error" id="pathError"></div>
+        </div>
+        <div class="field">
+            <label>${insertPrompt.replace(/</g, '&lt;')}</label>
+            <div class="radio-group">
+                <label><input type="radio" name="insertAs" value="ref" checked /> ${refLabel.replace(/</g, '&lt;')}</label>
+                <label><input type="radio" name="insertAs" value="base64" /> ${base64Label.replace(/</g, '&lt;')}</label>
+            </div>
+        </div>
+        <div class="actions">
+            <button type="button" class="secondary" id="btnCancel">${cancelLabel.replace(/</g, '&lt;')}</button>
+            <button type="submit" class="primary" id="btnConfirm">${confirmLabel.replace(/</g, '&lt;')}</button>
+        </div>
+    </form>
+    <script>
+        (function() {
+            var vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
+            if (!vscode) return;
+            var form = document.getElementById('form');
+            var pathInput = document.getElementById('path');
+            var pathError = document.getElementById('pathError');
+            var btnCancel = document.getElementById('btnCancel');
+            function validate() {
+                var val = (pathInput.value || '').trim().replace(/\\\\/g, '/');
+                if (!val) { pathError.textContent = '路径不能为空'; pathError.style.display = 'block'; return false; }
+                if (val.indexOf('..') !== -1) { pathError.textContent = '路径不能包含 ..'; pathError.style.display = 'block'; return false; }
+                pathError.style.display = 'none';
+                return true;
+            }
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!validate()) return;
+                var val = pathInput.value.trim().replace(/\\\\/g, '/');
+                var insertAs = form.insertAs.value;
+                vscode.postMessage({ pathInput: val, insertAs: insertAs });
+            });
+            btnCancel.addEventListener('click', function() {
+                vscode.postMessage({ cancel: true });
+            });
+        })();
+    </script>
+</body>
+</html>`;
+    }
+
+    private showPasteImageDialog(
+        suggestedPath: string,
+        documentUri: vscode.Uri,
+        imageDataBase64: string,
+        mimeType: string
+    ): void {
+        const panel = vscode.window.createWebviewPanel(
+            'coraPasteImageDialog',
+            t('preview.pasteImageTitle'),
+            vscode.ViewColumn.One,
+            { enableScripts: true }
+        );
+        panel.webview.html = this.getPasteImageDialogHtml(suggestedPath);
+
+        panel.webview.onDidReceiveMessage(async (msg: { pathInput?: string; insertAs?: string; cancel?: boolean }) => {
+            if (msg.cancel) {
+                panel.dispose();
+                return;
+            }
+            const pathInput = typeof msg.pathInput === 'string' ? msg.pathInput.trim().replace(/\\/g, '/') : '';
+            const insertAs = msg.insertAs === 'base64' ? 'base64' as const : 'ref' as const;
+            if (!pathInput || pathInput.includes('..')) {
+                panel.dispose();
+                return;
+            }
+            const docDir = path.dirname(documentUri.fsPath);
+            const absolutePath = path.resolve(docDir, pathInput);
+            const dir = path.dirname(absolutePath);
+            try {
+                await fs.promises.mkdir(dir, { recursive: true });
+                const buf = Buffer.from(imageDataBase64, 'base64');
+                await fs.promises.writeFile(absolutePath, buf);
+                this.clearContentCacheForUri(documentUri);
+                this.panel?.webview.postMessage({
+                    command: 'pasteImageResult',
+                    pathForRef: pathInput,
+                    insertAs
+                });
+            } catch (e) {
+                console.error('[Cora] Paste image save failed:', e);
+                this.panel?.webview.postMessage({ command: 'pasteImageResult', error: String(e) });
+            }
+            panel.dispose();
+        });
+    }
+
+    private async handlePasteImage(msg: { documentUri?: string; imageDataBase64?: string; mimeType?: string }): Promise<void> {
+        const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
+        const imageDataBase64 = typeof msg.imageDataBase64 === 'string' ? msg.imageDataBase64 : undefined;
+        if (!documentUriStr || !imageDataBase64) return;
+        const documentUri = vscode.Uri.parse(documentUriStr);
+        const suggested = await this.suggestDefaultImagePath(documentUri);
+        this.showPasteImageDialog(suggested, documentUri, imageDataBase64, msg.mimeType || 'image/png');
+    }
+
+    private async handleImageSwitchToRef(msg: { documentUri?: string; imageDataBase64?: string }): Promise<{ pathForRef: string } | undefined> {
+        const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
+        const imageDataBase64 = typeof msg.imageDataBase64 === 'string' ? msg.imageDataBase64 : undefined;
+        if (!documentUriStr || !imageDataBase64) return undefined;
+        const documentUri = vscode.Uri.parse(documentUriStr);
+        const suggested = await this.suggestDefaultImagePath(documentUri);
+        const pathInput = await vscode.window.showInputBox({
+            title: t('preview.imageSwitchToRef'),
+            value: suggested,
+            placeHolder: t('preview.pasteImagePathPlaceholder')
+        });
+        if (pathInput == null || pathInput.trim() === '') return undefined;
+        const relativePath = pathInput.trim().replace(/\\/g, '/');
+        const docDir = path.dirname(documentUri.fsPath);
+        const absolutePath = path.resolve(docDir, relativePath);
+        const dir = path.dirname(absolutePath);
+        await fs.promises.mkdir(dir, { recursive: true });
+        const buf = Buffer.from(imageDataBase64, 'base64');
+        await fs.promises.writeFile(absolutePath, buf);
+        this.clearContentCacheForUri(documentUri);
+        return { pathForRef: relativePath };
+    }
+
+    private async handleImageSwitchToBase64(msg: { documentUri?: string; path?: string }): Promise<{ imageDataBase64: string; mimeType: string } | undefined> {
+        const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
+        const relPath = typeof msg.path === 'string' ? msg.path.trim() : undefined;
+        if (!documentUriStr || !relPath) return undefined;
+        const documentUri = vscode.Uri.parse(documentUriStr);
+        const docDir = path.dirname(documentUri.fsPath);
+        const absolutePath = path.resolve(docDir, relPath);
+        const buf = await fs.promises.readFile(absolutePath);
+        const ext = path.extname(absolutePath).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/png';
+        return { imageDataBase64: buf.toString('base64'), mimeType };
+    }
+
     private getNonce(): string {
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         let text = '';
@@ -410,7 +647,7 @@ export class PreviewProvider {
         return map;
     }
 
-    /** 将 HTML 中相对路径的 img src 重写为 webview 可访问的 URI */
+    /** 将 HTML 中相对路径的 img src 重写为 webview 可访问的 URI，并保留 data-cora-src 供悬浮切换引用/base64 使用 */
     private rewriteHtmlImageUrls(html: string, documentUri: vscode.Uri, webview: vscode.Webview): string {
         const baseDir = path.dirname(documentUri.fsPath);
         return html.replace(/<img([^>]*)\ssrc=["']([^"']+)["']/gi, (match, attrs, src) => {
@@ -419,7 +656,8 @@ export class PreviewProvider {
                 const absolutePath = path.resolve(baseDir, src.trim());
                 if (!fs.existsSync(absolutePath)) return match;
                 const webviewUri = webview.asWebviewUri(vscode.Uri.file(absolutePath));
-                return `<img${attrs} src="${webviewUri.toString()}"`;
+                const relPath = src.trim().replace(/\\/g, '/');
+                return `<img${attrs} src="${webviewUri.toString()}" data-cora-src="${relPath.replace(/"/g, '&quot;')}"`;
             } catch {
                 return match;
             }
@@ -470,8 +708,12 @@ export class PreviewProvider {
         const initialRenderedJson = JSON.stringify(renderedHtml).replace(/<\/script>/gi, '\\u003c/script>');
         const tabPreview = t('preview.tabPreview');
         const tabMarkdown = t('preview.tabMarkdown');
+        const copyPreviewLabel = t('preview.copyPreview');
+        const copiedToClipboardLabel = t('preview.copiedToClipboard');
 
         const addToChatLabel = t('preview.addToChat');
+        const imageSwitchToRefLabel = t('preview.imageSwitchToRef');
+        const imageSwitchToBase64Label = t('preview.imageSwitchToBase64');
         const i18nMermaid = JSON.stringify({
             mermaidError: t('preview.mermaidError'),
             mermaidLoading: t('preview.mermaidLoading'),
@@ -496,8 +738,10 @@ export class PreviewProvider {
         ::highlight(cora-find-active) { background: var(--vscode-editor-findMatchBackground, rgba(86, 156, 214, 0.45)); }
         .top-bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--vscode-editor-background, #fff); border-bottom: 1px solid var(--vscode-widget-border, rgba(0,0,0,0.08)); display: flex; align-items: center; justify-content: center; padding: 0 20px; z-index: 1001; }
         .mode-switch-wrapper { position: absolute; right: 40px; display: flex; background: #eee; border-radius: 4px; padding: 2px; gap: 2px; user-select: none; }
+        .copy-preview-btn { position: absolute; left: 20px; padding: 4px 12px; font-size: 12px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08); background: #eee; color: #666; cursor: pointer; }
+        .copy-preview-btn:hover { background: #e0e0e0; }
         .mode-tab { padding: 3px 12px; font-size: 12px; border-radius: 3px; cursor: pointer; transition: all 0.2s ease; color: #666; min-width: 40px; text-align: center; }
-        .mode-tab.active { background: #1a00ff; color: #fff; }
+        .mode-tab.active { background: #d1d5db; color: #374151; }
         .mode-tab:not(.active):hover { background: #e0e0e0; }
         .content-area { margin-top: 48px; height: calc(100vh - 48px); overflow: auto; }
         #marked-preview { max-width: 860px; margin: 0 auto; padding: 20px 32px; font-family: ${targetFontFamily} !important; font-size: ${fontSizePreview}px !important; line-height: ${lineHeightPreview} !important; }
@@ -546,10 +790,17 @@ export class PreviewProvider {
         .cora-selection-toolbar { position: absolute; top: 8px; right: 16px; z-index: 100; display: none; flex: none; background: var(--vscode-editorWidget-background, #f3f4f6); border: 1px solid var(--vscode-editorWidget-border, rgba(0,0,0,0.12)); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2px 4px; font-size: 12px; }
         .cora-selection-toolbar.visible { display: flex; align-items: center; gap: 4px; }
         .cora-selection-toolbar button { padding: 4px 10px; border: none; border-radius: 4px; background: transparent; cursor: pointer; font-size: 12px; }
+        .cora-image-wrap { position: relative; display: inline-block; }
+        .cora-image-wrap img { display: block; max-width: 100%; }
+        .cora-image-actions { position: absolute; top: 6px; right: 6px; display: none; flex-direction: row; gap: 4px; z-index: 10; }
+        .cora-image-wrap:hover .cora-image-actions { display: flex; }
+        .cora-image-actions button { padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); color: var(--vscode-foreground, #333); cursor: pointer; }
+        .cora-image-actions button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
     </style>
 </head>
 <body>
     <div class="top-bar">
+        <button type="button" id="cora-copy-preview-btn" class="copy-preview-btn" data-copied="${copiedToClipboardLabel}" aria-label="${copyPreviewLabel}">${copyPreviewLabel}</button>
         <div class="mode-switch-wrapper">
             <div id="tab-visual" class="mode-tab active">${tabPreview}</div>
             <div id="tab-source" class="mode-tab">${tabMarkdown}</div>
@@ -571,7 +822,7 @@ export class PreviewProvider {
     </div>
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
-    <script nonce="${nonce}">${mermaidScript}</script>
+    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabel)},base64:${JSON.stringify(imageSwitchToBase64Label)}};${mermaidScript}</script>
     <script nonce="${nonce}">${this.getTableLayoutScript()}</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
@@ -632,7 +883,11 @@ export class PreviewProvider {
         const initialImageMapJson = JSON.stringify(imageMap).replace(/<\/script>/gi, '\\u003c/script>');
         const tabPreview = t('preview.tabPreview');
         const tabMarkdown = t('preview.tabMarkdown');
+        const copyPreviewLabel = t('preview.copyPreview');
+        const copiedToClipboardLabel = t('preview.copiedToClipboard');
         const addToChatLabel = t('preview.addToChat');
+        const imageSwitchToRefLabelMilk = t('preview.imageSwitchToRef');
+        const imageSwitchToBase64LabelMilk = t('preview.imageSwitchToBase64');
         const i18nMermaid = JSON.stringify({
             mermaidError: t('preview.mermaidError'),
             mermaidLoading: t('preview.mermaidLoading'),
@@ -648,7 +903,7 @@ export class PreviewProvider {
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script nonce="${nonce}">window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_HISTORY_BUNDLE__ = "${historyBundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
+    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabelMilk)},base64:${JSON.stringify(imageSwitchToBase64LabelMilk)}};window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_HISTORY_BUNDLE__ = "${historyBundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
     <style>
         ${fontCss}
         body {
@@ -801,6 +1056,21 @@ export class PreviewProvider {
             z-index: 1001;
         }
 
+        /* 复制按钮 - 顶部左侧，与右侧未激活 tab 同色弱化 */
+        .copy-preview-btn {
+            position: absolute;
+            left: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: #eee;
+            color: #666;
+            cursor: pointer;
+        }
+        .copy-preview-btn:hover {
+            background: #e0e0e0;
+        }
         /* 选项卡切换器 - 固定宽度与位置 */
         .mode-switch-wrapper {
             position: absolute;
@@ -823,8 +1093,8 @@ export class PreviewProvider {
             text-align: center;
         }
         .mode-tab.active {
-            background: #1a00ff;
-            color: #fff;
+            background: #d1d5db;
+            color: #374151;
         }
         .mode-tab:not(.active):hover {
             background: #e0e0e0;
@@ -917,6 +1187,13 @@ export class PreviewProvider {
             background: var(--vscode-toolbar-hoverBackground, rgba(0,0,0,0.06));
         }
 
+        .cora-image-wrap { position: relative; display: inline-block; }
+        .cora-image-wrap img { display: block; max-width: 100%; }
+        .cora-image-actions { position: absolute; top: 6px; right: 6px; display: none; flex-direction: row; gap: 4px; z-index: 10; }
+        .cora-image-wrap:hover .cora-image-actions { display: flex; }
+        .cora-image-actions button { padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); color: var(--vscode-foreground, #333); cursor: pointer; }
+        .cora-image-actions button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
+
         /* 强力隐藏 */
         .mermaid-src-hidden {
             display: none !important;
@@ -925,12 +1202,13 @@ export class PreviewProvider {
 </head>
 <body>
     <div class="top-bar">
+        <button type="button" id="cora-copy-preview-btn" class="copy-preview-btn" data-copied="${copiedToClipboardLabel}" aria-label="${copyPreviewLabel}">${copyPreviewLabel}</button>
         <div class="mode-switch-wrapper">
             <div id="tab-visual" class="mode-tab active">${tabPreview}</div>
             <div id="tab-source" class="mode-tab">${tabMarkdown}</div>
         </div>
     </div>
-    
+
     <div class="content-area">
         <div id="visual-editor-container">
             <div id="editor"></div>

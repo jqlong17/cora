@@ -127,6 +127,9 @@ export function registerCommands(context: vscode.ExtensionContext, c: ServiceCon
         vscode.commands.registerCommand('knowledgeBase.revealInFinder', (item) => {
             commands.revealInFinder(item);
         }),
+        vscode.commands.registerCommand('knowledgeBase.locateInPageTree', (item) => {
+            void commands.locateInPageTree(item, c.configService, c.pageTreeProvider, () => syncPageTreeViewLayoutContext(c.configService));
+        }),
         vscode.commands.registerCommand('knowledgeBase.copyPath', (item) => {
             const view = item && typeof item === 'object' && 'contextValue' in item && String((item as { contextValue?: string }).contextValue).startsWith('coraPlan.')
                 ? undefined

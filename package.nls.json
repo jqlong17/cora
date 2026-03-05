@@ -31,6 +31,7 @@
   "cmd.expandAll": "Expand all",
   "cmd.gotoHeading": "Go to heading",
   "cmd.revealInFinder": "Reveal in Finder",
+  "cmd.locateInPageTree": "Locate in page tree",
   "cmd.copyPath": "Copy absolute path",
   "cmd.copyRelativePath": "Copy relative path",
   "cmd.searchNotes": "Search notes",

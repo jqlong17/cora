@@ -174,7 +174,7 @@ async function initEditor() {
 
     let currentMarkdown = '';
     let isSourceMode = false;
-    let visualContainer, sourceContainer, textarea, tabVisual, tabSource;
+    let visualContainer, sourceContainer, textarea, tabVisual, tabSource, copyPreviewBtn;
 
     try {
         // 1. 数据准备
@@ -200,6 +200,7 @@ async function initEditor() {
         const lineNumbersEl = document.getElementById('source-line-numbers');
         tabVisual = document.getElementById('tab-visual');
         tabSource = document.getElementById('tab-source');
+        copyPreviewBtn = document.getElementById('cora-copy-preview-btn');
         const contentArea = document.querySelector('.content-area');
 
         let findBar = null;
@@ -626,6 +627,7 @@ async function initEditor() {
             sourceContainer.style.display = 'block';
             tabVisual.classList.remove('active');
             tabSource.classList.add('active');
+            if (copyPreviewBtn) copyPreviewBtn.style.display = 'none';
             debug('切换至源码模式');
         };
 
@@ -643,6 +645,7 @@ async function initEditor() {
             visualContainer.style.visibility = 'hidden';
             tabSource.classList.remove('active');
             tabVisual.classList.add('active');
+            if (copyPreviewBtn) copyPreviewBtn.style.display = '';
             setTimeout(() => {
                 scrollPreviewToLine(lineIdx, { immediate: true });
                 if (findBar && findBar.style.display !== 'none') {
@@ -652,6 +655,36 @@ async function initEditor() {
             }, 120);
             debug('切换至预览模式');
         };
+
+        function copyPreviewToClipboard() {
+            if (!navigator.clipboard?.write) return;
+            const root = getPreviewRoot();
+            if (!root) return;
+            const clone = root.cloneNode(true);
+            clone.querySelectorAll('script').forEach((s) => s.remove());
+            const html = clone.innerHTML.replace(/<\/?script\b[^>]*>/gi, '');
+            const plain = (root.innerText || root.textContent || '').trim();
+            if (!html && !plain) return;
+            const copiedLabel = copyPreviewBtn?.getAttribute('data-copied') || 'Copied';
+            const origText = copyPreviewBtn?.textContent || '';
+            navigator.clipboard
+                .write([
+                    new ClipboardItem({
+                        'text/html': new Blob([html], { type: 'text/html;charset=utf-8' }),
+                        'text/plain': new Blob([plain], { type: 'text/plain;charset=utf-8' }),
+                    }),
+                ])
+                .then(() => {
+                    if (copyPreviewBtn) {
+                        copyPreviewBtn.textContent = copiedLabel;
+                        setTimeout(() => (copyPreviewBtn.textContent = origText), 1500);
+                    }
+                })
+                .catch(() => {});
+        }
+        if (copyPreviewBtn) {
+            copyPreviewBtn.addEventListener('click', () => copyPreviewToClipboard());
+        }
 
         tabSource.addEventListener('click', switchToSource);
         tabVisual.addEventListener('click', switchToVisual);
@@ -678,6 +711,58 @@ async function initEditor() {
         const debouncedSourceUpdate = debounce((markdown) => {
             vscode.postMessage({ command: 'editorUpdate', content: markdown });
         }, 300);
+
+        let pendingPasteImage = null;
+        function insertMarkdownSnippet(snippet) {
+            if (isSourceMode) {
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const val = textarea.value;
+                const newVal = val.slice(0, start) + snippet + val.slice(end);
+                textarea.value = newVal;
+                textarea.setSelectionRange(start + snippet.length, start + snippet.length);
+                currentMarkdown = newVal;
+                updateSourceLineNumbers();
+                debouncedSourceUpdate(newVal);
+            } else {
+                const base = currentMarkdown || '';
+                const newContent = base + (base.endsWith('\n') ? '' : '\n') + snippet;
+                currentMarkdown = newContent;
+                if (window.editor) window.editor.action(replaceAll(newContent));
+                debouncedSourceUpdate(newContent);
+            }
+        }
+
+        document.addEventListener('paste', (e) => {
+            if (!e.clipboardData?.items) return;
+            let item = null;
+            for (let i = 0; i < e.clipboardData.items.length; i++) {
+                if (e.clipboardData.items[i].type.indexOf('image/') === 0) {
+                    item = e.clipboardData.items[i];
+                    break;
+                }
+            }
+            if (!item) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const file = item.getAsFile();
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const dataUrl = reader.result;
+                if (typeof dataUrl !== 'string' || !dataUrl.includes('base64,')) return;
+                const base64 = dataUrl.split('base64,')[1];
+                const mimeType = (file.type || 'image/png').toLowerCase();
+                pendingPasteImage = { base64, mimeType };
+                vscode.postMessage({
+                    command: 'pasteImage',
+                    documentUri: window.__CORA_DOCUMENT_URI__,
+                    imageDataBase64: base64,
+                    mimeType,
+                });
+            };
+            reader.readAsDataURL(file);
+        }, true);
 
         textarea.addEventListener('input', (e) => {
             currentMarkdown = e.target.value;
@@ -895,12 +980,74 @@ async function initEditor() {
                 const raw = img.getAttribute('src');
                 if (raw && imageMap[raw]) {
                     img.src = imageMap[raw];
+                    img.setAttribute('data-cora-src', raw);
                 }
             });
         }
 
+        let pendingImageReplace = null;
+        const imageInsertLabels = typeof window.__CORA_IMAGE_INSERT_LABELS__ !== 'undefined' ? window.__CORA_IMAGE_INSERT_LABELS__ : { ref: 'Reference file', base64: 'Base64 inline' };
+        function wrapImagesWithInsertOptions(container) {
+            if (!container || !vscode) return;
+            const imgs = container.querySelectorAll ? container.querySelectorAll('img') : [];
+            imgs.forEach((img) => {
+                if (img.closest && img.closest('.cora-image-wrap')) return;
+                const wrap = document.createElement('div');
+                wrap.className = 'cora-image-wrap';
+                const actions = document.createElement('div');
+                actions.className = 'cora-image-actions';
+                const btnRef = document.createElement('button');
+                btnRef.type = 'button';
+                btnRef.textContent = imageInsertLabels.ref || 'Reference file';
+                const btnBase64 = document.createElement('button');
+                btnBase64.type = 'button';
+                btnBase64.textContent = imageInsertLabels.base64 || 'Base64';
+                const src = (img.getAttribute('src') || '').trim();
+                const dataSrc = (img.getAttribute('data-cora-src') || '').trim();
+                const isDataUrl = src.indexOf('data:') === 0;
+                const oldPattern = '![](' + (isDataUrl ? src : dataSrc || src) + ')';
+                btnRef.addEventListener('click', () => {
+                    if (isDataUrl) {
+                        const base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
+                        const mime = (src.match(/^data:([^;]+);/) || [])[1] || 'image/png';
+                        if (base64) {
+                            pendingImageReplace = { oldPattern, kind: 'ref' };
+                            vscode.postMessage({ command: 'imageSwitchToRef', documentUri: window.__CORA_DOCUMENT_URI__, imageDataBase64: base64 });
+                        }
+                    }
+                });
+                btnBase64.addEventListener('click', () => {
+                    if (dataSrc || (!isDataUrl && src)) {
+                        const pathToUse = dataSrc || src;
+                        pendingImageReplace = { oldPattern, kind: 'base64' };
+                        vscode.postMessage({ command: 'imageSwitchToBase64', documentUri: window.__CORA_DOCUMENT_URI__, path: pathToUse });
+                    }
+                });
+                actions.appendChild(btnRef);
+                actions.appendChild(btnBase64);
+                img.parentNode.insertBefore(wrap, img);
+                wrap.appendChild(img);
+                wrap.appendChild(actions);
+            });
+        }
+        function replaceMarkdownImageAndSync(oldPattern, newSnippet) {
+            const content = isSourceMode ? textarea.value : currentMarkdown;
+            const idx = content.indexOf(oldPattern);
+            if (idx === -1) return;
+            const newContent = content.slice(0, idx) + newSnippet + content.slice(idx + oldPattern.length);
+            currentMarkdown = newContent;
+            if (isSourceMode) {
+                textarea.value = newContent;
+                updateSourceLineNumbers();
+            } else if (window.editor) {
+                window.editor.action(replaceAll(newContent));
+            }
+            debouncedSourceUpdate(newContent);
+        }
+
         const initialImageMap = typeof window.__CORA_IMAGE_MAP__ !== 'undefined' ? window.__CORA_IMAGE_MAP__ : {};
         setTimeout(() => applyImageMap(editorElement, initialImageMap), 100);
+        setTimeout(() => wrapImagesWithInsertOptions(getPreviewRoot()), 150);
         setTimeout(() => {
             if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
         }, 300);
@@ -909,6 +1056,7 @@ async function initEditor() {
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'updateContent') {
+                if (typeof message.uri === 'string') window.__CORA_DOCUMENT_URI__ = message.uri;
                 const { content, imageMap } = message;
                 currentMarkdown = content;
                 debug('收到热更新内容');
@@ -919,6 +1067,7 @@ async function initEditor() {
                 } else if (window.editor) {
                     window.editor.action(replaceAll(content));
                     setTimeout(() => applyImageMap(editorElement, imageMap || {}), 50);
+                    setTimeout(() => wrapImagesWithInsertOptions(getPreviewRoot()), 80);
                     setTimeout(() => {
                         if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
                     }, 200);
@@ -926,6 +1075,57 @@ async function initEditor() {
                 if (findBar && findBar.style.display !== 'none') {
                     refreshFindMatches(true);
                 }
+                return;
+            }
+
+            if (message.command === 'pasteImageResult') {
+                if (message.error) {
+                    pendingPasteImage = null;
+                    return;
+                }
+                const pathForRef = message.pathForRef;
+                const insertAs = message.insertAs;
+                let snippet = '';
+                if (insertAs === 'ref' && pathForRef) {
+                    snippet = `![](${pathForRef})`;
+                } else if (insertAs === 'base64' && pendingPasteImage) {
+                    snippet = `![](data:${pendingPasteImage.mimeType};base64,${pendingPasteImage.base64})`;
+                } else {
+                    pendingPasteImage = null;
+                    return;
+                }
+                insertMarkdownSnippet(snippet);
+                pendingPasteImage = null;
+                return;
+            }
+
+            if (message.command === 'imageSwitchToRefResult') {
+                if (message.error || !pendingImageReplace || pendingImageReplace.kind !== 'ref') {
+                    pendingImageReplace = null;
+                    return;
+                }
+                const pathForRef = message.pathForRef;
+                if (!pathForRef) {
+                    pendingImageReplace = null;
+                    return;
+                }
+                replaceMarkdownImageAndSync(pendingImageReplace.oldPattern, `![](${pathForRef})`);
+                pendingImageReplace = null;
+                return;
+            }
+            if (message.command === 'imageSwitchToBase64Result') {
+                if (message.error || !pendingImageReplace || pendingImageReplace.kind !== 'base64') {
+                    pendingImageReplace = null;
+                    return;
+                }
+                const b64 = message.imageDataBase64;
+                const mime = message.mimeType || 'image/png';
+                if (!b64) {
+                    pendingImageReplace = null;
+                    return;
+                }
+                replaceMarkdownImageAndSync(pendingImageReplace.oldPattern, `![](data:${mime};base64,${b64})`);
+                pendingImageReplace = null;
                 return;
             }
 

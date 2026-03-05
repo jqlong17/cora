@@ -2,7 +2,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { FileItem } from '../services/fileService';
 import type { PageTreeItem } from '../providers/pageTreeProvider';
+import type { ConfigService } from '../services/configService';
+import type { PageTreeProvider } from '../providers/pageTreeProvider';
 import { t } from '../utils/i18n';
+import { setPageViewMode } from './setPageViewMode';
 
 type ContextTarget = { item?: FileItem; reportPath?: string };
 
@@ -56,6 +59,27 @@ export async function revealInFinder(item: ContextTarget | undefined): Promise<v
     } catch (error) {
         vscode.window.showErrorMessage(`${t('msg.revealFailed')}: ${error}`);
     }
+}
+
+/** 平铺模式下右键「在页面树中定位」：切到树状、逐层展开所属文件夹、滚动到该文件节点并选中 */
+export async function locateInPageTree(
+    item: ContextTarget | PageTreeItem | undefined,
+    configService: ConfigService,
+    pageTreeProvider: PageTreeProvider,
+    syncPageTreeViewLayoutContext: () => void
+): Promise<void> {
+    const uri = (item as PageTreeItem)?.item?.uri ?? toFileItem(item as ContextTarget)?.uri;
+    if (!uri) return;
+    await setPageViewMode('tree', configService, pageTreeProvider);
+    syncPageTreeViewLayoutContext();
+    await new Promise((r) => setTimeout(r, 150));
+    const result = await pageTreeProvider.findItemByUriWithAncestors(uri);
+    const treeView = pageTreeProvider.getTreeView();
+    if (!result || !treeView) return;
+    for (const ancestor of result.ancestors) {
+        await treeView.reveal(ancestor, { expand: 1, select: false, focus: false });
+    }
+    await treeView.reveal(result.node, { select: true, focus: true });
 }
 
 export async function copyPath(
