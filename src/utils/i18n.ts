@@ -163,6 +163,7 @@ const zh: Messages = {
         pasteImageInsertTypePrompt: '选择插入方式',
         pasteImageConfirm: '确定',
         pasteImageCancel: '取消',
+        pasteImageConvertToRefTitle: '转为引用文件',
         imageSwitchToRef: '引用文件',
         imageSwitchToBase64: 'Base64 内联',
     },
@@ -193,6 +194,8 @@ const zh: Messages = {
         nameSame: '新名称不能与旧名称相同',
         renamed: '已重命名为',
         renameFailed: '重命名失败',
+        moveSuccess: '已移动 {n} 项',
+        moveFailed: '移动失败',
     },
 };
 
@@ -344,6 +347,7 @@ const en: Messages = {
         pasteImageInsertTypePrompt: 'Insert as',
         pasteImageConfirm: 'OK',
         pasteImageCancel: 'Cancel',
+        pasteImageConvertToRefTitle: 'Convert to reference file',
         imageSwitchToRef: 'Reference file',
         imageSwitchToBase64: 'Base64 inline',
     },
@@ -377,6 +381,8 @@ const en: Messages = {
         nameSame: 'New name must be different',
         renamed: 'Renamed to',
         renameFailed: 'Rename failed',
+        moveSuccess: 'Moved {n} item(s)',
+        moveFailed: 'Move failed',
     },
 };
 

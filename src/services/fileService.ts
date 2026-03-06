@@ -25,6 +25,12 @@ export class FileService {
         return vscode.workspace.workspaceFolders || [];
     }
 
+    /** 返回给定 URI 所属的工作区根目录；若不在任何工作区内则返回 undefined。 */
+    getWorkspaceRootForUri(uri: vscode.Uri): vscode.Uri | undefined {
+        const folder = vscode.workspace.getWorkspaceFolder(uri);
+        return folder?.uri;
+    }
+
     /** 当 filterMarkdownOnly 为 true 时仅返回 Markdown 文件；为 undefined 时使用 config filterMode（兼容旧逻辑）。 */
     async getChildren(item?: FileItem, options?: { filterMarkdownOnly?: boolean }): Promise<FileItem[]> {
         let targetUri: vscode.Uri;
@@ -247,6 +253,36 @@ export class FileService {
             return vscode.Uri.file(newPath);
         } catch (error) {
             console.error('Error renaming item:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 将文件或文件夹移动到目标文件夹内。不允许将文件夹移动到其自身或其后代中。
+     */
+    async moveItem(sourceUri: vscode.Uri, targetDirUri: vscode.Uri): Promise<vscode.Uri | null> {
+        const sourcePath = path.normalize(sourceUri.fsPath);
+        const targetDirPath = path.normalize(targetDirUri.fsPath);
+        if (sourcePath === targetDirPath) {
+            return null;
+        }
+        const stat = await fs.promises.stat(sourcePath).catch(() => null);
+        if (!stat) {
+            return null;
+        }
+        const targetPath = path.join(targetDirPath, path.basename(sourcePath));
+        if (targetPath === sourcePath) {
+            return null;
+        }
+        // 禁止将文件夹移动到其自身或其后代目录中
+        if (stat.isDirectory() && targetDirPath.startsWith(sourcePath + path.sep)) {
+            return null;
+        }
+        try {
+            await fs.promises.rename(sourcePath, targetPath);
+            return vscode.Uri.file(targetPath);
+        } catch (error) {
+            console.error('Error moving item:', error);
             return null;
         }
     }

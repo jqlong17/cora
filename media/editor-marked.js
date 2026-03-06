@@ -343,6 +343,11 @@
         hideSelectionToolbar();
         debug('切换至预览');
     }
+    document.addEventListener('keydown', function (e) {
+        if (!isSourceMode && vscode && (e.metaKey || e.ctrlKey) && e.key === 'v') {
+            textarea.focus();
+        }
+    }, true);
 
     function normalizeKey(text) {
         return (text || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 160);
@@ -563,11 +568,11 @@
             var mimeType = (file.type || 'image/png').toLowerCase();
             pendingPasteImage = { base64: base64, mimeType: mimeType };
             vscode.postMessage({
-                command: 'pasteImage',
+                command: 'requestImagePathSuggestion',
                 documentUri: window.__CORA_DOCUMENT_URI__,
-                imageDataBase64: base64,
-                mimeType: mimeType
+                requestKind: 'paste'
             });
+            if (!isSourceMode) setTimeout(function () { textarea.blur(); }, 0);
         };
         reader.readAsDataURL(file);
     }, true);
@@ -822,6 +827,164 @@
     }
 
     var pendingImageReplace = null;
+    var imageDialogLabels = window.__CORA_IMAGE_DIALOG_LABELS__ || {
+        pasteTitle: 'Paste Image',
+        convertToRefTitle: 'Convert to reference file',
+        pathPrompt: 'Enter save path and filename',
+        pathPlaceholder: 'Path and filename (relative to current .md)',
+        insertPrompt: 'Insert as',
+        ref: 'Reference file',
+        base64: 'Base64 inline',
+        confirm: 'OK',
+        cancel: 'Cancel'
+    };
+    var inlineImageDialog = null;
+
+    function closeInlineImageDialog(clearPending) {
+        if (!inlineImageDialog) return;
+        if (clearPending !== false) {
+            var pending = inlineImageDialog.pending;
+            if (pending && pending.kind === 'paste') pendingPasteImage = null;
+            if (pending && pending.kind === 'switchToRef') pendingImageReplace = null;
+        }
+        inlineImageDialog.pending = null;
+        inlineImageDialog.overlay.style.display = 'none';
+        inlineImageDialog.panel.style.display = 'none';
+    }
+
+    function ensureInlineImageDialog() {
+        if (inlineImageDialog) return inlineImageDialog;
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:1300;display:none;';
+        var panel = document.createElement('div');
+        panel.style.cssText = 'position:fixed;z-index:1301;display:none;width:320px;max-width:calc(100vw - 24px);background:var(--vscode-editorWidget-background,#fff);border:1px solid var(--vscode-widget-border,rgba(0,0,0,0.12));border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:12px;';
+        var title = document.createElement('div');
+        title.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:10px;';
+        var pathLabel = document.createElement('label');
+        pathLabel.style.cssText = 'display:block;font-size:12px;margin-bottom:4px;color:var(--vscode-input-foreground);';
+        var pathInput = document.createElement('input');
+        pathInput.type = 'text';
+        pathInput.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;font-size:12px;border:1px solid var(--vscode-input-border);background:var(--vscode-input-background);color:var(--vscode-input-foreground);border-radius:4px;';
+        var insertWrap = document.createElement('div');
+        insertWrap.style.cssText = 'margin-top:10px;';
+        var insertLabel = document.createElement('div');
+        insertLabel.style.cssText = 'font-size:12px;margin-bottom:4px;color:var(--vscode-input-foreground);';
+        var radioWrap = document.createElement('div');
+        radioWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+        var refLabel = document.createElement('label');
+        refLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;';
+        var radioRef = document.createElement('input');
+        radioRef.type = 'radio';
+        radioRef.name = 'cora-marked-inline-image-insert-as';
+        radioRef.value = 'ref';
+        radioRef.checked = true;
+        refLabel.appendChild(radioRef);
+        refLabel.appendChild(document.createTextNode(imageDialogLabels.ref || 'Reference file'));
+        var base64Label = document.createElement('label');
+        base64Label.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;';
+        var radioBase64 = document.createElement('input');
+        radioBase64.type = 'radio';
+        radioBase64.name = 'cora-marked-inline-image-insert-as';
+        radioBase64.value = 'base64';
+        base64Label.appendChild(radioBase64);
+        base64Label.appendChild(document.createTextNode(imageDialogLabels.base64 || 'Base64 inline'));
+        radioWrap.appendChild(refLabel);
+        radioWrap.appendChild(base64Label);
+        insertWrap.appendChild(insertLabel);
+        insertWrap.appendChild(radioWrap);
+        var errorEl = document.createElement('div');
+        errorEl.style.cssText = 'display:none;color:var(--vscode-errorForeground);font-size:12px;margin-top:6px;';
+        var actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px;';
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = imageDialogLabels.cancel || 'Cancel';
+        cancelBtn.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:4px;border:1px solid var(--vscode-button-border);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);cursor:pointer;';
+        var confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.textContent = imageDialogLabels.confirm || 'OK';
+        confirmBtn.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:4px;border:1px solid var(--vscode-button-border);background:var(--vscode-button-background);color:var(--vscode-button-foreground);cursor:pointer;';
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        panel.appendChild(title);
+        panel.appendChild(pathLabel);
+        panel.appendChild(pathInput);
+        panel.appendChild(insertWrap);
+        panel.appendChild(errorEl);
+        panel.appendChild(actions);
+        overlay.addEventListener('click', function () { closeInlineImageDialog(true); });
+        cancelBtn.addEventListener('click', function () { closeInlineImageDialog(true); });
+        confirmBtn.addEventListener('click', function () {
+            var pending = inlineImageDialog && inlineImageDialog.pending;
+            if (!pending) return;
+            var val = (pathInput.value || '').trim().replace(/\\/g, '/');
+            if (!val || val.indexOf('..') !== -1) {
+                errorEl.textContent = '路径不能为空，且不能包含 ..';
+                errorEl.style.display = 'block';
+                return;
+            }
+            errorEl.style.display = 'none';
+            var insertAs = radioBase64.checked ? 'base64' : 'ref';
+            vscode.postMessage({
+                command: 'saveImageFromBase64',
+                documentUri: window.__CORA_DOCUMENT_URI__,
+                imageDataBase64: pending.base64,
+                mimeType: pending.mimeType,
+                pathInput: val,
+                insertAs: insertAs,
+                requestKind: pending.kind
+            });
+            closeInlineImageDialog(false);
+        });
+        document.body.appendChild(overlay);
+        document.body.appendChild(panel);
+        inlineImageDialog = {
+            overlay: overlay,
+            panel: panel,
+            title: title,
+            pathLabel: pathLabel,
+            pathInput: pathInput,
+            insertWrap: insertWrap,
+            insertLabel: insertLabel,
+            radioRef: radioRef,
+            radioBase64: radioBase64,
+            errorEl: errorEl,
+            pending: null
+        };
+        return inlineImageDialog;
+    }
+
+    function openInlineImageDialog(options) {
+        var dialog = ensureInlineImageDialog();
+        dialog.pending = options;
+        dialog.title.textContent = options.kind === 'switchToRef'
+            ? (imageDialogLabels.convertToRefTitle || 'Convert to reference file')
+            : (imageDialogLabels.pasteTitle || 'Paste Image');
+        dialog.pathLabel.textContent = imageDialogLabels.pathPrompt || 'Enter save path and filename';
+        dialog.pathInput.value = options.suggestedPath || '';
+        dialog.pathInput.placeholder = imageDialogLabels.pathPlaceholder || '';
+        dialog.insertLabel.textContent = imageDialogLabels.insertPrompt || 'Insert as';
+        dialog.insertWrap.style.display = options.kind === 'switchToRef' ? 'none' : 'block';
+        dialog.radioRef.checked = true;
+        dialog.radioBase64.checked = false;
+        dialog.errorEl.style.display = 'none';
+        dialog.overlay.style.display = 'block';
+        dialog.panel.style.display = 'block';
+        var panelWidth = 320;
+        var panelHeight = options.kind === 'switchToRef' ? 150 : 210;
+        var left = Math.round((window.innerWidth - panelWidth) / 2);
+        var top = Math.max(60, Math.round((window.innerHeight - panelHeight) / 2));
+        if (options.anchorRect) {
+            left = Math.min(window.innerWidth - panelWidth - 12, Math.max(12, Math.round(options.anchorRect.right - panelWidth)));
+            top = Math.min(window.innerHeight - panelHeight - 12, Math.max(60, Math.round(options.anchorRect.bottom + 8)));
+        }
+        dialog.panel.style.left = left + 'px';
+        dialog.panel.style.top = top + 'px';
+        setTimeout(function () {
+            dialog.pathInput.focus();
+            dialog.pathInput.select();
+        }, 0);
+    }
 
     function wrapImagesWithInsertOptions(container) {
         if (!container || !vscode) return;
@@ -843,14 +1006,12 @@
             var dataSrc = (img.getAttribute('data-cora-src') || '').trim();
             var isDataUrl = src.indexOf('data:') === 0;
             var oldPattern = '![](' + (isDataUrl ? src : dataSrc || src) + ')';
+            btnRef.disabled = !isDataUrl;
+            btnBase64.disabled = isDataUrl;
             btnRef.addEventListener('click', function () {
                 if (isDataUrl) {
-                    var base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
-                    var mime = (src.match(/^data:([^;]+);/) || [])[1] || 'image/png';
-                    if (base64) {
-                        pendingImageReplace = { oldPattern: oldPattern, kind: 'ref' };
-                        vscode.postMessage({ command: 'imageSwitchToRef', documentUri: window.__CORA_DOCUMENT_URI__, imageDataBase64: base64 });
-                    }
+                    pendingImageReplace = { oldPattern: oldPattern, kind: 'ref', dataUrl: src, anchorRect: img.getBoundingClientRect() };
+                    vscode.postMessage({ command: 'requestImagePathSuggestion', documentUri: window.__CORA_DOCUMENT_URI__, requestKind: 'switchToRef' });
                 }
             });
             btnBase64.addEventListener('click', function () {
@@ -904,6 +1065,41 @@
             debug('收到热更新内容');
             return;
         }
+        if (message.command === 'imagePathSuggestionResult') {
+            if (message.error) {
+                if (message.requestKind === 'paste') pendingPasteImage = null;
+                if (message.requestKind === 'switchToRef') pendingImageReplace = null;
+                return;
+            }
+            var suggestedPath = message.suggestedPath;
+            if (!suggestedPath) return;
+            if (message.requestKind === 'paste' && pendingPasteImage) {
+                openInlineImageDialog({
+                    kind: 'paste',
+                    suggestedPath: suggestedPath,
+                    base64: pendingPasteImage.base64,
+                    mimeType: pendingPasteImage.mimeType
+                });
+                return;
+            }
+            if (message.requestKind === 'switchToRef' && pendingImageReplace && pendingImageReplace.dataUrl) {
+                var dataUrl = pendingImageReplace.dataUrl;
+                var base64 = dataUrl.indexOf('base64,') >= 0 ? dataUrl.split('base64,')[1] : '';
+                if (!base64) {
+                    pendingImageReplace = null;
+                    return;
+                }
+                openInlineImageDialog({
+                    kind: 'switchToRef',
+                    suggestedPath: suggestedPath,
+                    base64: base64,
+                    mimeType: (dataUrl.match(/^data:([^;]+);/) || [])[1] || 'image/png',
+                    anchorRect: pendingImageReplace.anchorRect
+                });
+                return;
+            }
+            return;
+        }
         if (message.command === 'pasteImageResult') {
             if (message.error) {
                 pendingPasteImage = null;
@@ -922,6 +1118,9 @@
             }
             var offset = isSourceMode ? textarea.selectionStart : textarea.value.length;
             insertMarkdownAtOffset(snippet, offset);
+            if (!isSourceMode && vscode) {
+                vscode.postMessage({ command: 'requestPreviewUpdate', content: textarea.value });
+            }
             pendingPasteImage = null;
             return;
         }
@@ -939,6 +1138,9 @@
                 textarea.value = content.slice(0, idx) + newSnippet + content.slice(idx + pendingImageReplace.oldPattern.length);
                 updateSourceLineNumbers();
                 debouncedUpdate(textarea.value);
+                if (!isSourceMode && vscode) {
+                    vscode.postMessage({ command: 'requestPreviewUpdate', content: textarea.value });
+                }
             }
             pendingImageReplace = null;
             return;
@@ -958,6 +1160,9 @@
                 textarea.value = content.slice(0, idx) + newSnippet + content.slice(idx + pendingImageReplace.oldPattern.length);
                 updateSourceLineNumbers();
                 debouncedUpdate(textarea.value);
+                if (!isSourceMode && vscode) {
+                    vscode.postMessage({ command: 'requestPreviewUpdate', content: textarea.value });
+                }
             }
             pendingImageReplace = null;
             return;

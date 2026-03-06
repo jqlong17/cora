@@ -49,6 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
     // ── 3. 注册树视图 ──
     const pageTreeView = vscode.window.createTreeView('pageTree', {
         treeDataProvider: pageTreeProvider,
+        dragAndDropController: pageTreeProvider.getDragAndDropController(),
         showCollapseAll: false,
         canSelectMany: true
     });

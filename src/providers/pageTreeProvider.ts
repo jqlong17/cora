@@ -7,6 +7,8 @@ import { isMarkdownFile } from '../utils/markdownParser';
 import { t } from '../utils/i18n';
 import { DEFAULT_MARKDOWN_EXTENSIONS } from '../utils/constants';
 
+const PAGE_TREE_MIME_TYPE = 'application/vnd.code.tree.pagetree';
+
 export class PageTreeItem extends vscode.TreeItem {
     constructor(
         public readonly item: FileItem,
@@ -232,6 +234,69 @@ export class PageTreeProvider implements vscode.TreeDataProvider<PageTreeItem> {
 
     getTreeView(): vscode.TreeView<PageTreeItem> | undefined {
         return this.treeView;
+    }
+
+    /** 拖拽控制器：支持将多个文件/文件夹拖拽到目标文件夹内移动 */
+    getDragAndDropController(): vscode.TreeDragAndDropController<PageTreeItem> {
+        return {
+            dragMimeTypes: [PAGE_TREE_MIME_TYPE],
+            dropMimeTypes: [PAGE_TREE_MIME_TYPE],
+            handleDrag: (source: PageTreeItem[], dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): void => {
+                const uris = source.map(s => s.item.uri.toString());
+                dataTransfer.set(PAGE_TREE_MIME_TYPE, new vscode.DataTransferItem(uris));
+            },
+            handleDrop: async (target: PageTreeItem | undefined, dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> => {
+                const item = dataTransfer.get(PAGE_TREE_MIME_TYPE);
+                if (!item?.value) {
+                    return;
+                }
+                const uris = item.value as string[];
+                if (!Array.isArray(uris) || uris.length === 0) {
+                    return;
+                }
+                let targetDirUri: vscode.Uri | undefined;
+                if (!target) {
+                    const folders = this.fileService.getWorkspaceFolders();
+                    if (folders.length === 0) return;
+                    if (folders.length === 1) {
+                        targetDirUri = folders[0].uri;
+                    } else {
+                        const firstUri = vscode.Uri.parse(uris[0]);
+                        targetDirUri = this.fileService.getWorkspaceRootForUri(firstUri);
+                        if (!targetDirUri) targetDirUri = folders[0].uri;
+                    }
+                } else if (target.item.type === 'directory') {
+                    targetDirUri = target.item.uri;
+                } else {
+                    targetDirUri = vscode.Uri.file(path.dirname(target.item.uri.fsPath));
+                }
+                if (!targetDirUri) return;
+                let moved = 0;
+                const folders = this.fileService.getWorkspaceFolders();
+                const isDropOnRoot = folders.some(f => path.normalize(f.uri.fsPath) === path.normalize(targetDirUri!.fsPath));
+                for (const uriStr of uris) {
+                    try {
+                        const sourceUri = vscode.Uri.parse(uriStr);
+                        if (isDropOnRoot && folders.length > 1) {
+                            const sourceRoot = this.fileService.getWorkspaceRootForUri(sourceUri);
+                            if (sourceRoot?.fsPath !== targetDirUri.fsPath) continue;
+                        }
+                        const newUri = await this.fileService.moveItem(sourceUri, targetDirUri);
+                        if (newUri) {
+                            moved++;
+                        }
+                    } catch {
+                        // skip invalid or failed
+                    }
+                }
+                if (moved > 0) {
+                    this.refresh();
+                    vscode.window.showInformationMessage(t('fileOp.moveSuccess', { n: moved }));
+                } else {
+                    vscode.window.showErrorMessage(t('fileOp.moveFailed'));
+                }
+            },
+        };
     }
 
     async expandAll(): Promise<void> {

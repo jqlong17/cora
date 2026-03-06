@@ -7,6 +7,20 @@ import type { PreviewProvider } from '../providers/previewProvider';
 import { openPreview } from './editorCommands';
 import { t } from '../utils/i18n';
 
+/** 无右键上下文时，仅当页面树选中了文件夹时返回该文件夹作为父目录；否则返回 undefined，由调用方在根目录新建。 */
+function resolveParentUriWithoutItem(
+    _fileService: FileService,
+    treeView?: vscode.TreeView<PageTreeItem>
+): vscode.Uri | undefined {
+    if (treeView?.selection?.length) {
+        const first = treeView.selection[0];
+        if (first?.item.type === 'directory') {
+            return first.item.uri;
+        }
+    }
+    return undefined;
+}
+
 export async function newNote(
     item: { item: FileItem } | undefined,
     fileService: FileService,
@@ -14,21 +28,21 @@ export async function newNote(
     previewProvider: PreviewProvider,
     treeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
-    // Determine the parent folder
+    // Determine the parent folder：仅当有文件夹被激活（选中或右键）时在该文件夹下新建，否则在根目录新建。
+    const folders = fileService.getWorkspaceFolders();
+    if (folders.length === 0) {
+        vscode.window.showErrorMessage(t('msg.noWorkspace'));
+        return;
+    }
     let parentUri: vscode.Uri;
     if (item && item.item.type === 'directory') {
         parentUri = item.item.uri;
     } else if (item && item.item.type === 'file') {
-        parentUri = vscode.Uri.file(path.dirname(item.item.uri.fsPath));
-    } else {
-        // Use first workspace folder；无选中时先定位到页面树根节点再显示输入框
-        const folders = fileService.getWorkspaceFolders();
-        if (folders.length === 0) {
-            vscode.window.showErrorMessage(t('msg.noWorkspace'));
-            return;
-        }
         parentUri = folders[0].uri;
-        if (treeView) {
+    } else {
+        const resolved = resolveParentUriWithoutItem(fileService, treeView);
+        parentUri = resolved ?? folders[0].uri;
+        if (!resolved && treeView) {
             const roots = await pageTreeProvider.getChildren();
             if (roots.length > 0) {
                 await treeView.reveal(roots[0], { focus: true, expand: true });
@@ -73,20 +87,21 @@ export async function newFolder(
     pageTreeProvider: PageTreeProvider,
     treeView?: vscode.TreeView<PageTreeItem>
 ): Promise<void> {
-    // Determine the parent folder
+    // Determine the parent folder：仅当有文件夹被激活（选中或右键）时在该文件夹下新建，否则在根目录新建。
+    const folders = fileService.getWorkspaceFolders();
+    if (folders.length === 0) {
+        vscode.window.showErrorMessage(t('msg.noWorkspace'));
+        return;
+    }
     let parentUri: vscode.Uri;
     if (item && item.item.type === 'directory') {
         parentUri = item.item.uri;
     } else if (item && item.item.type === 'file') {
-        parentUri = vscode.Uri.file(path.dirname(item.item.uri.fsPath));
-    } else {
-        const folders = fileService.getWorkspaceFolders();
-        if (folders.length === 0) {
-            vscode.window.showErrorMessage(t('msg.noWorkspace'));
-            return;
-        }
         parentUri = folders[0].uri;
-        if (treeView) {
+    } else {
+        const resolved = resolveParentUriWithoutItem(fileService, treeView);
+        parentUri = resolved ?? folders[0].uri;
+        if (!resolved && treeView) {
             const roots = await pageTreeProvider.getChildren();
             if (roots.length > 0) {
                 await treeView.reveal(roots[0], { focus: true, expand: true });

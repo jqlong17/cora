@@ -201,6 +201,29 @@ export class PreviewProvider {
                 return;
             }
 
+            if (msg.command === 'requestImagePathSuggestion') {
+                this.handleRequestImagePathSuggestion(msg).then((result) => {
+                    if (result) this.panel?.webview.postMessage({ command: 'imagePathSuggestionResult', ...result });
+                }).catch((e) => {
+                    console.error('[Cora] requestImagePathSuggestion failed:', e);
+                    this.panel?.webview.postMessage({ command: 'imagePathSuggestionResult', error: String(e), requestKind: msg.requestKind });
+                });
+                return;
+            }
+
+            if (msg.command === 'saveImageFromBase64') {
+                this.handleSaveImageFromBase64(msg).then((result) => {
+                    if (!result) return;
+                    const command = result.requestKind === 'switchToRef' ? 'imageSwitchToRefResult' : 'pasteImageResult';
+                    this.panel?.webview.postMessage({ command, ...result });
+                }).catch((e) => {
+                    console.error('[Cora] saveImageFromBase64 failed:', e);
+                    const command = msg.requestKind === 'switchToRef' ? 'imageSwitchToRefResult' : 'pasteImageResult';
+                    this.panel?.webview.postMessage({ command, error: String(e) });
+                });
+                return;
+            }
+
             if (msg.command === 'pasteImage') {
                 this.handlePasteImage(msg).catch((e) => {
                     console.error('[Cora] pasteImage failed:', e);
@@ -209,10 +232,26 @@ export class PreviewProvider {
                 return;
             }
 
+            if (msg.command === 'requestPreviewUpdate' && typeof msg.content === 'string') {
+                if (this.panel && this.currentUri?.toString() && this.currentPreviewMode === 'marked') {
+                    try {
+                        let html = marked.parse(msg.content) as string;
+                        html = this.rewriteHtmlImageUrls(html, this.currentUri, this.panel.webview);
+                        this.panel.webview.postMessage({
+                            command: 'updateContent',
+                            content: msg.content,
+                            uri: this.currentUri.toString(),
+                            renderedHtml: this.sanitizeHtml(html)
+                        });
+                    } catch (e) {
+                        console.error('[Cora] requestPreviewUpdate render failed:', e);
+                    }
+                }
+                return;
+            }
+
             if (msg.command === 'imageSwitchToRef') {
-                this.handleImageSwitchToRef(msg).then((result) => {
-                    if (result) this.panel?.webview.postMessage({ command: 'imageSwitchToRefResult', ...result });
-                }).catch((e) => {
+                this.handleImageSwitchToRef(msg).catch((e) => {
                     console.error('[Cora] imageSwitchToRef failed:', e);
                     this.panel?.webview.postMessage({ command: 'imageSwitchToRefResult', error: String(e) });
                 });
@@ -417,8 +456,45 @@ export class PreviewProvider {
         return `images/${prefix}${nextN}.png`;
     }
 
-    private getPasteImageDialogHtml(suggestedPath: string): string {
-        const title = t('preview.pasteImageTitle');
+    private async handleRequestImagePathSuggestion(msg: { documentUri?: string; requestKind?: string }): Promise<{ suggestedPath: string; requestKind?: string } | undefined> {
+        const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
+        if (!documentUriStr) return undefined;
+        const documentUri = vscode.Uri.parse(documentUriStr);
+        const suggestedPath = await this.suggestDefaultImagePath(documentUri);
+        return { suggestedPath, requestKind: msg.requestKind };
+    }
+
+    private async handleSaveImageFromBase64(msg: {
+        documentUri?: string;
+        imageDataBase64?: string;
+        pathInput?: string;
+        insertAs?: string;
+        requestKind?: string;
+    }): Promise<{ requestKind?: string; pathForRef: string; insertAs?: 'ref' | 'base64'; previewSrc?: string } | undefined> {
+        const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
+        const imageDataBase64 = typeof msg.imageDataBase64 === 'string' ? msg.imageDataBase64 : undefined;
+        const pathInput = typeof msg.pathInput === 'string' ? msg.pathInput.trim().replace(/\\/g, '/') : '';
+        if (!documentUriStr || !imageDataBase64 || !pathInput || pathInput.includes('..')) return undefined;
+        const documentUri = vscode.Uri.parse(documentUriStr);
+        const docDir = path.dirname(documentUri.fsPath);
+        const absolutePath = path.resolve(docDir, pathInput);
+        const dir = path.dirname(absolutePath);
+        await fs.promises.mkdir(dir, { recursive: true });
+        const buf = Buffer.from(imageDataBase64, 'base64');
+        await fs.promises.writeFile(absolutePath, buf);
+        this.clearContentCacheForUri(documentUri);
+        const previewSrc = this.panel?.webview.asWebviewUri(vscode.Uri.file(absolutePath)).toString();
+        return {
+            requestKind: msg.requestKind,
+            pathForRef: pathInput,
+            insertAs: msg.insertAs === 'base64' ? 'base64' : 'ref',
+            previewSrc,
+        };
+    }
+
+    private getPasteImageDialogHtml(suggestedPath: string, options?: { convertToRefOnly?: boolean }): string {
+        const convertToRefOnly = options?.convertToRefOnly === true;
+        const title = convertToRefOnly ? t('preview.pasteImageConvertToRefTitle') : t('preview.pasteImageTitle');
         const pathPrompt = t('preview.pasteImagePathPrompt');
         const pathPlaceholder = t('preview.pasteImagePathPlaceholder');
         const insertPrompt = t('preview.pasteImageInsertTypePrompt');
@@ -427,6 +503,14 @@ export class PreviewProvider {
         const confirmLabel = t('preview.pasteImageConfirm');
         const cancelLabel = t('preview.pasteImageCancel');
         const escapedPath = suggestedPath.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const insertTypeBlock = convertToRefOnly ? '' : `
+        <div class="field">
+            <label>${insertPrompt.replace(/</g, '&lt;')}</label>
+            <div class="radio-group">
+                <label><input type="radio" name="insertAs" value="ref" checked /> ${refLabel.replace(/</g, '&lt;')}</label>
+                <label><input type="radio" name="insertAs" value="base64" /> ${base64Label.replace(/</g, '&lt;')}</label>
+            </div>
+        </div>`;
         return `<!DOCTYPE html>
 <html lang="${htmlLang()}">
 <head>
@@ -459,13 +543,7 @@ export class PreviewProvider {
             <input type="text" id="path" name="path" value="${escapedPath}" placeholder="${pathPlaceholder.replace(/"/g, '&quot;')}" autocomplete="off" />
             <div class="error" id="pathError"></div>
         </div>
-        <div class="field">
-            <label>${insertPrompt.replace(/</g, '&lt;')}</label>
-            <div class="radio-group">
-                <label><input type="radio" name="insertAs" value="ref" checked /> ${refLabel.replace(/</g, '&lt;')}</label>
-                <label><input type="radio" name="insertAs" value="base64" /> ${base64Label.replace(/</g, '&lt;')}</label>
-            </div>
-        </div>
+        ${insertTypeBlock}
         <div class="actions">
             <button type="button" class="secondary" id="btnCancel">${cancelLabel.replace(/</g, '&lt;')}</button>
             <button type="submit" class="primary" id="btnConfirm">${confirmLabel.replace(/</g, '&lt;')}</button>
@@ -475,6 +553,7 @@ export class PreviewProvider {
         (function() {
             var vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
             if (!vscode) return;
+            var convertToRefOnly = ${convertToRefOnly ? 'true' : 'false'};
             var form = document.getElementById('form');
             var pathInput = document.getElementById('path');
             var pathError = document.getElementById('pathError');
@@ -490,8 +569,12 @@ export class PreviewProvider {
                 e.preventDefault();
                 if (!validate()) return;
                 var val = pathInput.value.trim().replace(/\\\\/g, '/');
-                var insertAs = form.insertAs.value;
-                vscode.postMessage({ pathInput: val, insertAs: insertAs });
+                if (convertToRefOnly) {
+                    vscode.postMessage({ pathInput: val, convertToRef: true });
+                } else {
+                    var insertAs = form.insertAs.value;
+                    vscode.postMessage({ pathInput: val, insertAs: insertAs });
+                }
             });
             btnCancel.addEventListener('click', function() {
                 vscode.postMessage({ cancel: true });
@@ -516,13 +599,12 @@ export class PreviewProvider {
         );
         panel.webview.html = this.getPasteImageDialogHtml(suggestedPath);
 
-        panel.webview.onDidReceiveMessage(async (msg: { pathInput?: string; insertAs?: string; cancel?: boolean }) => {
+        panel.webview.onDidReceiveMessage(async (msg: { pathInput?: string; insertAs?: string; cancel?: boolean; convertToRef?: boolean }) => {
             if (msg.cancel) {
                 panel.dispose();
                 return;
             }
             const pathInput = typeof msg.pathInput === 'string' ? msg.pathInput.trim().replace(/\\/g, '/') : '';
-            const insertAs = msg.insertAs === 'base64' ? 'base64' as const : 'ref' as const;
             if (!pathInput || pathInput.includes('..')) {
                 panel.dispose();
                 return;
@@ -535,14 +617,73 @@ export class PreviewProvider {
                 const buf = Buffer.from(imageDataBase64, 'base64');
                 await fs.promises.writeFile(absolutePath, buf);
                 this.clearContentCacheForUri(documentUri);
-                this.panel?.webview.postMessage({
-                    command: 'pasteImageResult',
-                    pathForRef: pathInput,
-                    insertAs
-                });
+                const previewSrc = this.panel?.webview.asWebviewUri(vscode.Uri.file(absolutePath)).toString();
+                if (msg.convertToRef) {
+                    this.panel?.webview.postMessage({
+                        command: 'imageSwitchToRefResult',
+                        pathForRef: pathInput,
+                        previewSrc
+                    });
+                } else {
+                    const insertAs = msg.insertAs === 'base64' ? 'base64' as const : 'ref' as const;
+                    this.panel?.webview.postMessage({
+                        command: 'pasteImageResult',
+                        pathForRef: pathInput,
+                        insertAs,
+                        previewSrc
+                    });
+                }
             } catch (e) {
                 console.error('[Cora] Paste image save failed:', e);
-                this.panel?.webview.postMessage({ command: 'pasteImageResult', error: String(e) });
+                this.panel?.webview.postMessage(msg.convertToRef
+                    ? { command: 'imageSwitchToRefResult', error: String(e) }
+                    : { command: 'pasteImageResult', error: String(e) });
+            }
+            panel.dispose();
+        });
+    }
+
+    /** 内嵌图转为引用文件：弹窗选路径后保存并回发 imageSwitchToRefResult */
+    private showConvertImageToRefDialog(
+        suggestedPath: string,
+        documentUri: vscode.Uri,
+        imageDataBase64: string
+    ): void {
+        const panel = vscode.window.createWebviewPanel(
+            'coraConvertImageToRefDialog',
+            t('preview.pasteImageConvertToRefTitle'),
+            vscode.ViewColumn.One,
+            { enableScripts: true }
+        );
+        panel.webview.html = this.getPasteImageDialogHtml(suggestedPath, { convertToRefOnly: true });
+
+        panel.webview.onDidReceiveMessage(async (msg: { pathInput?: string; cancel?: boolean }) => {
+            if (msg.cancel) {
+                panel.dispose();
+                return;
+            }
+            const pathInput = typeof msg.pathInput === 'string' ? msg.pathInput.trim().replace(/\\/g, '/') : '';
+            if (!pathInput || pathInput.includes('..')) {
+                panel.dispose();
+                return;
+            }
+            const docDir = path.dirname(documentUri.fsPath);
+            const absolutePath = path.resolve(docDir, pathInput);
+            const dir = path.dirname(absolutePath);
+            try {
+                await fs.promises.mkdir(dir, { recursive: true });
+                const buf = Buffer.from(imageDataBase64, 'base64');
+                await fs.promises.writeFile(absolutePath, buf);
+                this.clearContentCacheForUri(documentUri);
+                const previewSrc = this.panel?.webview.asWebviewUri(vscode.Uri.file(absolutePath)).toString();
+                this.panel?.webview.postMessage({
+                    command: 'imageSwitchToRefResult',
+                    pathForRef: pathInput,
+                    previewSrc
+                });
+            } catch (e) {
+                console.error('[Cora] Convert image to ref failed:', e);
+                this.panel?.webview.postMessage({ command: 'imageSwitchToRefResult', error: String(e) });
             }
             panel.dispose();
         });
@@ -557,27 +698,13 @@ export class PreviewProvider {
         this.showPasteImageDialog(suggested, documentUri, imageDataBase64, msg.mimeType || 'image/png');
     }
 
-    private async handleImageSwitchToRef(msg: { documentUri?: string; imageDataBase64?: string }): Promise<{ pathForRef: string } | undefined> {
+    private async handleImageSwitchToRef(msg: { documentUri?: string; imageDataBase64?: string }): Promise<void> {
         const documentUriStr = typeof msg.documentUri === 'string' ? msg.documentUri : undefined;
         const imageDataBase64 = typeof msg.imageDataBase64 === 'string' ? msg.imageDataBase64 : undefined;
-        if (!documentUriStr || !imageDataBase64) return undefined;
+        if (!documentUriStr || !imageDataBase64) return;
         const documentUri = vscode.Uri.parse(documentUriStr);
         const suggested = await this.suggestDefaultImagePath(documentUri);
-        const pathInput = await vscode.window.showInputBox({
-            title: t('preview.imageSwitchToRef'),
-            value: suggested,
-            placeHolder: t('preview.pasteImagePathPlaceholder')
-        });
-        if (pathInput == null || pathInput.trim() === '') return undefined;
-        const relativePath = pathInput.trim().replace(/\\/g, '/');
-        const docDir = path.dirname(documentUri.fsPath);
-        const absolutePath = path.resolve(docDir, relativePath);
-        const dir = path.dirname(absolutePath);
-        await fs.promises.mkdir(dir, { recursive: true });
-        const buf = Buffer.from(imageDataBase64, 'base64');
-        await fs.promises.writeFile(absolutePath, buf);
-        this.clearContentCacheForUri(documentUri);
-        return { pathForRef: relativePath };
+        this.showConvertImageToRefDialog(suggested, documentUri, imageDataBase64);
     }
 
     private async handleImageSwitchToBase64(msg: { documentUri?: string; path?: string }): Promise<{ imageDataBase64: string; mimeType: string } | undefined> {
@@ -604,7 +731,8 @@ export class PreviewProvider {
 
     /** 检测文档是否包含需渲染的 HTML 块/标签，用于走 Marked 只读预览分支 */
     private containsHtmlBlock(content: string): boolean {
-        return /<[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>|<\s*\/\s*[a-zA-Z]/.test(content);
+        const blockLikeTag = /<\s*\/?\s*(script|style|iframe|canvas|svg|math|video|audio|picture|source|table|thead|tbody|tfoot|tr|td|th|colgroup|col|details|summary|form|input|button|select|option|textarea|figure|figcaption|section|article|aside|nav|header|footer|main|div)\b/i;
+        return blockLikeTag.test(content);
     }
 
     /** 检测文档是否包含 ```mermaid 代码块，用于按需注入 Mermaid 脚本 */
@@ -714,6 +842,17 @@ export class PreviewProvider {
         const addToChatLabel = t('preview.addToChat');
         const imageSwitchToRefLabel = t('preview.imageSwitchToRef');
         const imageSwitchToBase64Label = t('preview.imageSwitchToBase64');
+        const imageDialogLabels = JSON.stringify({
+            pasteTitle: t('preview.pasteImageTitle'),
+            convertToRefTitle: t('preview.pasteImageConvertToRefTitle'),
+            pathPrompt: t('preview.pasteImagePathPrompt'),
+            pathPlaceholder: t('preview.pasteImagePathPlaceholder'),
+            insertPrompt: t('preview.pasteImageInsertTypePrompt'),
+            ref: t('preview.pasteImageInsertTypeRef'),
+            base64: t('preview.pasteImageInsertTypeBase64'),
+            confirm: t('preview.pasteImageConfirm'),
+            cancel: t('preview.pasteImageCancel')
+        }).replace(/<\/script>/gi, '\\u003c/script>');
         const i18nMermaid = JSON.stringify({
             mermaidError: t('preview.mermaidError'),
             mermaidLoading: t('preview.mermaidLoading'),
@@ -796,6 +935,7 @@ export class PreviewProvider {
         .cora-image-wrap:hover .cora-image-actions { display: flex; }
         .cora-image-actions button { padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); color: var(--vscode-foreground, #333); cursor: pointer; }
         .cora-image-actions button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
+        .cora-image-actions button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -822,7 +962,7 @@ export class PreviewProvider {
     </div>
     <script type="application/json" id="initial-markdown">${initialMarkdownJson}</script>
     <script type="application/json" id="initial-rendered-html">${initialRenderedJson}</script>
-    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabel)},base64:${JSON.stringify(imageSwitchToBase64Label)}};${mermaidScript}</script>
+    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabel)},base64:${JSON.stringify(imageSwitchToBase64Label)}};window.__CORA_IMAGE_DIALOG_LABELS__=${imageDialogLabels};${mermaidScript}</script>
     <script nonce="${nonce}">${this.getTableLayoutScript()}</script>
     <script nonce="${nonce}" src="${editorMarkedJsUri}"></script>
 </body>
@@ -888,6 +1028,17 @@ export class PreviewProvider {
         const addToChatLabel = t('preview.addToChat');
         const imageSwitchToRefLabelMilk = t('preview.imageSwitchToRef');
         const imageSwitchToBase64LabelMilk = t('preview.imageSwitchToBase64');
+        const imageDialogLabels = JSON.stringify({
+            pasteTitle: t('preview.pasteImageTitle'),
+            convertToRefTitle: t('preview.pasteImageConvertToRefTitle'),
+            pathPrompt: t('preview.pasteImagePathPrompt'),
+            pathPlaceholder: t('preview.pasteImagePathPlaceholder'),
+            insertPrompt: t('preview.pasteImageInsertTypePrompt'),
+            ref: t('preview.pasteImageInsertTypeRef'),
+            base64: t('preview.pasteImageInsertTypeBase64'),
+            confirm: t('preview.pasteImageConfirm'),
+            cancel: t('preview.pasteImageCancel')
+        }).replace(/<\/script>/gi, '\\u003c/script>');
         const i18nMermaid = JSON.stringify({
             mermaidError: t('preview.mermaidError'),
             mermaidLoading: t('preview.mermaidLoading'),
@@ -903,7 +1054,7 @@ export class PreviewProvider {
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' https: ${webview.cspSource}; img-src https: http: data: blob: ${webview.cspSource}; connect-src https:;">
     <title>Cora Editor</title>
-    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabelMilk)},base64:${JSON.stringify(imageSwitchToBase64LabelMilk)}};window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_HISTORY_BUNDLE__ = "${historyBundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
+    <script nonce="${nonce}">window.__CORA_DOCUMENT_URI__=${JSON.stringify(uri.toString())};window.__CORA_IMAGE_INSERT_LABELS__={ref:${JSON.stringify(imageSwitchToRefLabelMilk)},base64:${JSON.stringify(imageSwitchToBase64LabelMilk)}};window.__CORA_IMAGE_DIALOG_LABELS__=${imageDialogLabels};window.__CORA_BUNDLE__ = "${bundleUri}"; window.__CORA_HISTORY_BUNDLE__ = "${historyBundleUri}"; window.__CORA_MERMAID__ = "${mermaidJsUri}"; window.__CORA_IMAGE_MAP__ = ${initialImageMapJson}; window.__CORA_I18N__ = ${i18nMermaid};</script>
     <style>
         ${fontCss}
         body {
@@ -939,6 +1090,14 @@ export class PreviewProvider {
             border: none !important;
         }
         .milkdown .editor:focus {
+            outline: none !important;
+        }
+        .milkdown .ProseMirror {
+            caret-color: var(--vscode-editorCursor-foreground, currentColor);
+            cursor: text;
+            min-height: calc(100vh - 120px);
+        }
+        .milkdown .ProseMirror-focused {
             outline: none !important;
         }
         /* 标题 */
@@ -1187,12 +1346,10 @@ export class PreviewProvider {
             background: var(--vscode-toolbar-hoverBackground, rgba(0,0,0,0.06));
         }
 
-        .cora-image-wrap { position: relative; display: inline-block; }
-        .cora-image-wrap img { display: block; max-width: 100%; }
-        .cora-image-actions { position: absolute; top: 6px; right: 6px; display: none; flex-direction: row; gap: 4px; z-index: 10; }
-        .cora-image-wrap:hover .cora-image-actions { display: flex; }
-        .cora-image-actions button { padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); color: var(--vscode-foreground, #333); cursor: pointer; }
-        .cora-image-actions button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
+        .cora-image-floating-actions { position: fixed; display: none; flex-direction: row; gap: 4px; z-index: 1200; padding: 4px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); box-shadow: 0 4px 16px rgba(0,0,0,0.16); }
+        .cora-image-floating-actions button { padding: 2px 8px; font-size: 11px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); background: var(--vscode-editorWidget-background, #fff); color: var(--vscode-foreground, #333); cursor: pointer; }
+        .cora-image-floating-actions button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
+        .cora-image-floating-actions button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
         /* 强力隐藏 */
         .mermaid-src-hidden {

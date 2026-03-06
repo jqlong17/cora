@@ -617,6 +617,7 @@ async function initEditor() {
             if (isSourceMode) return;
             const lineIdx = getCurrentPreviewLineIndex();
             isSourceMode = true;
+            hideImageActionsOverlay(true);
             textarea.value = currentMarkdown;
             updateSourceLineNumbers();
             placeSourceCursorToLine(lineIdx);
@@ -635,6 +636,7 @@ async function initEditor() {
             if (!isSourceMode) return;
             const lineIdx = getCurrentSourceLineIndex();
             isSourceMode = false;
+            hideImageActionsOverlay(true);
             hideSelectionToolbar();
             currentMarkdown = textarea.value;
             if (window.editor) {
@@ -651,7 +653,10 @@ async function initEditor() {
                 if (findBar && findBar.style.display !== 'none') {
                     refreshFindMatches(true);
                 }
-                requestAnimationFrame(() => { visualContainer.style.visibility = 'visible'; });
+                requestAnimationFrame(() => {
+                    visualContainer.style.visibility = 'visible';
+                    focusVisualEditor();
+                });
             }, 120);
             debug('切换至预览模式');
         };
@@ -698,6 +703,17 @@ async function initEditor() {
                 e.stopPropagation();
                 vscode.postMessage({ command: 'openLink', href });
             }, true);
+            contentArea.addEventListener('scroll', () => hideImageActionsOverlay(true), true);
+        }
+        if (visualContainer) {
+            visualContainer.addEventListener('mousedown', (e) => {
+                const target = e.target;
+                if (target?.closest?.('.cora-image-floating-actions')) return;
+                if (target?.closest?.('a[href]')) return;
+                requestAnimationFrame(() => {
+                    if (!isSourceMode) focusVisualEditor();
+                });
+            });
         }
         document.addEventListener('keydown', (e) => {
             const key = (e.key || '').toLowerCase();
@@ -713,7 +729,13 @@ async function initEditor() {
         }, 300);
 
         let pendingPasteImage = null;
-        function insertMarkdownSnippet(snippet) {
+        function insertMarkdownSnippet(snippet, options) {
+            const imageMap = options && options.imageMap ? options.imageMap : null;
+            const afterVisualInsert = () => {
+                if (!imageMap || isSourceMode) return;
+                setTimeout(() => applyImageMap(editorElement, imageMap), 40);
+                setTimeout(() => bindImageInsertOptions(getPreviewRoot()), 80);
+            };
             if (isSourceMode) {
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
@@ -730,6 +752,7 @@ async function initEditor() {
                 currentMarkdown = newContent;
                 if (window.editor) window.editor.action(replaceAll(newContent));
                 debouncedSourceUpdate(newContent);
+                afterVisualInsert();
             }
         }
 
@@ -755,10 +778,9 @@ async function initEditor() {
                 const mimeType = (file.type || 'image/png').toLowerCase();
                 pendingPasteImage = { base64, mimeType };
                 vscode.postMessage({
-                    command: 'pasteImage',
+                    command: 'requestImagePathSuggestion',
                     documentUri: window.__CORA_DOCUMENT_URI__,
-                    imageDataBase64: base64,
-                    mimeType,
+                    requestKind: 'paste',
                 });
             };
             reader.readAsDataURL(file);
@@ -908,6 +930,7 @@ async function initEditor() {
                 const isMermaid = (lang) => (lang || '').toLowerCase() === 'mermaid';
                 ctx.update(editorViewOptionsCtx, (prev) => ({
                     ...prev,
+                    editable: () => true,
                     nodeViews: {
                         ...prev.nodeViews,
                         code_block: (node, view, getPos) => {
@@ -950,6 +973,24 @@ async function initEditor() {
         const editor = await editorBuilder.create();
 
         window.editor = editor;
+        const getEditorView = () => {
+            try {
+                return editor.ctx.get(editorViewCtx);
+            } catch {
+                return null;
+            }
+        };
+        const focusVisualEditor = () => {
+            const view = getEditorView();
+            if (view && typeof view.focus === 'function') {
+                view.focus();
+                return;
+            }
+            const root = getPreviewRoot();
+            if (root && typeof root.focus === 'function') {
+                root.focus();
+            }
+        };
 
         const performUndo = () => {
             if (isSourceMode) {
@@ -987,48 +1028,245 @@ async function initEditor() {
 
         let pendingImageReplace = null;
         const imageInsertLabels = typeof window.__CORA_IMAGE_INSERT_LABELS__ !== 'undefined' ? window.__CORA_IMAGE_INSERT_LABELS__ : { ref: 'Reference file', base64: 'Base64 inline' };
-        function wrapImagesWithInsertOptions(container) {
-            if (!container || !vscode) return;
-            const imgs = container.querySelectorAll ? container.querySelectorAll('img') : [];
-            imgs.forEach((img) => {
-                if (img.closest && img.closest('.cora-image-wrap')) return;
-                const wrap = document.createElement('div');
-                wrap.className = 'cora-image-wrap';
-                const actions = document.createElement('div');
-                actions.className = 'cora-image-actions';
-                const btnRef = document.createElement('button');
-                btnRef.type = 'button';
-                btnRef.textContent = imageInsertLabels.ref || 'Reference file';
-                const btnBase64 = document.createElement('button');
-                btnBase64.type = 'button';
-                btnBase64.textContent = imageInsertLabels.base64 || 'Base64';
+        let imageActionsOverlay = null;
+        let activeImageForActions = null;
+        let hideImageActionsTimer = null;
+        function hideImageActionsOverlay(immediate) {
+            if (hideImageActionsTimer) {
+                clearTimeout(hideImageActionsTimer);
+                hideImageActionsTimer = null;
+            }
+            const hide = () => {
+                if (imageActionsOverlay) imageActionsOverlay.style.display = 'none';
+                activeImageForActions = null;
+            };
+            if (immediate) hide();
+            else hideImageActionsTimer = setTimeout(hide, 120);
+        }
+        function ensureImageActionsOverlay() {
+            if (imageActionsOverlay || !vscode) return imageActionsOverlay;
+            const overlay = document.createElement('div');
+            overlay.className = 'cora-image-floating-actions';
+            const btnRef = document.createElement('button');
+            btnRef.type = 'button';
+            btnRef.textContent = imageInsertLabels.ref || 'Reference file';
+            const btnBase64 = document.createElement('button');
+            btnBase64.type = 'button';
+            btnBase64.textContent = imageInsertLabels.base64 || 'Base64';
+            overlay.appendChild(btnRef);
+            overlay.appendChild(btnBase64);
+            overlay.addEventListener('mouseenter', () => {
+                if (hideImageActionsTimer) {
+                    clearTimeout(hideImageActionsTimer);
+                    hideImageActionsTimer = null;
+                }
+            });
+            overlay.addEventListener('mouseleave', () => hideImageActionsOverlay(false));
+            btnRef.addEventListener('click', () => {
+                const img = activeImageForActions;
+                if (!img) return;
+                const src = (img.getAttribute('src') || '').trim();
+                const isDataUrl = src.indexOf('data:') === 0;
+                if (!isDataUrl) return;
+                const base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
+                if (!base64) return;
+                const oldPattern = '![](' + src + ')';
+                pendingImageReplace = { oldPattern, kind: 'ref', dataUrl: src, anchorRect: img.getBoundingClientRect() };
+                vscode.postMessage({ command: 'requestImagePathSuggestion', documentUri: window.__CORA_DOCUMENT_URI__, requestKind: 'switchToRef' });
+                hideImageActionsOverlay(true);
+            });
+            btnBase64.addEventListener('click', () => {
+                const img = activeImageForActions;
+                if (!img) return;
                 const src = (img.getAttribute('src') || '').trim();
                 const dataSrc = (img.getAttribute('data-cora-src') || '').trim();
                 const isDataUrl = src.indexOf('data:') === 0;
+                const pathToUse = dataSrc || (!isDataUrl ? src : '');
+                if (!pathToUse) return;
                 const oldPattern = '![](' + (isDataUrl ? src : dataSrc || src) + ')';
-                btnRef.addEventListener('click', () => {
-                    if (isDataUrl) {
-                        const base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
-                        const mime = (src.match(/^data:([^;]+);/) || [])[1] || 'image/png';
-                        if (base64) {
-                            pendingImageReplace = { oldPattern, kind: 'ref' };
-                            vscode.postMessage({ command: 'imageSwitchToRef', documentUri: window.__CORA_DOCUMENT_URI__, imageDataBase64: base64 });
-                        }
-                    }
-                });
-                btnBase64.addEventListener('click', () => {
-                    if (dataSrc || (!isDataUrl && src)) {
-                        const pathToUse = dataSrc || src;
-                        pendingImageReplace = { oldPattern, kind: 'base64' };
-                        vscode.postMessage({ command: 'imageSwitchToBase64', documentUri: window.__CORA_DOCUMENT_URI__, path: pathToUse });
-                    }
-                });
-                actions.appendChild(btnRef);
-                actions.appendChild(btnBase64);
-                img.parentNode.insertBefore(wrap, img);
-                wrap.appendChild(img);
-                wrap.appendChild(actions);
+                pendingImageReplace = { oldPattern, kind: 'base64' };
+                vscode.postMessage({ command: 'imageSwitchToBase64', documentUri: window.__CORA_DOCUMENT_URI__, path: pathToUse });
+                hideImageActionsOverlay(true);
             });
+            document.body.appendChild(overlay);
+            imageActionsOverlay = overlay;
+            return overlay;
+        }
+        function showImageActionsOverlay(img) {
+            const overlay = ensureImageActionsOverlay();
+            if (!overlay || !img) return;
+            if (hideImageActionsTimer) {
+                clearTimeout(hideImageActionsTimer);
+                hideImageActionsTimer = null;
+            }
+            activeImageForActions = img;
+            const src = (img.getAttribute('src') || '').trim();
+            const isDataUrl = src.indexOf('data:') === 0;
+            const btns = overlay.querySelectorAll('button');
+            if (btns.length >= 2) {
+                btns[0].disabled = !isDataUrl;
+                btns[1].disabled = isDataUrl;
+            }
+            overlay.style.display = 'flex';
+            const rect = img.getBoundingClientRect();
+            const overlayWidth = overlay.offsetWidth || 160;
+            overlay.style.top = Math.max(56, rect.top + 8) + 'px';
+            overlay.style.left = Math.max(12, rect.right - overlayWidth - 8) + 'px';
+        }
+        function bindImageInsertOptions(container) {
+            if (!container || !vscode || !container.querySelectorAll) return;
+            const imgs = container.querySelectorAll('img');
+            imgs.forEach((img) => {
+                if (img.dataset.coraImageActionsBound === '1') return;
+                img.dataset.coraImageActionsBound = '1';
+                img.addEventListener('mouseenter', () => showImageActionsOverlay(img));
+                img.addEventListener('mouseleave', () => hideImageActionsOverlay(false));
+            });
+        }
+        const imageDialogLabels = typeof window.__CORA_IMAGE_DIALOG_LABELS__ !== 'undefined'
+            ? window.__CORA_IMAGE_DIALOG_LABELS__
+            : {
+                pasteTitle: 'Paste Image',
+                convertToRefTitle: 'Convert to reference file',
+                pathPrompt: 'Enter save path and filename',
+                pathPlaceholder: 'Path and filename (relative to current .md)',
+                insertPrompt: 'Insert as',
+                ref: 'Reference file',
+                base64: 'Base64 inline',
+                confirm: 'OK',
+                cancel: 'Cancel',
+            };
+        let inlineImageDialog = null;
+        function closeInlineImageDialog(clearPending) {
+            if (!inlineImageDialog) return;
+            if (clearPending !== false) {
+                const pending = inlineImageDialog.pending;
+                if (pending && pending.kind === 'paste') pendingPasteImage = null;
+                if (pending && pending.kind === 'switchToRef') pendingImageReplace = null;
+            }
+            inlineImageDialog.pending = null;
+            inlineImageDialog.overlay.style.display = 'none';
+            inlineImageDialog.panel.style.display = 'none';
+        }
+        function ensureInlineImageDialog() {
+            if (inlineImageDialog) return inlineImageDialog;
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:1300;display:none;';
+            const panel = document.createElement('div');
+            panel.style.cssText = 'position:fixed;z-index:1301;display:none;width:320px;max-width:calc(100vw - 24px);background:var(--vscode-editorWidget-background,#fff);border:1px solid var(--vscode-widget-border,rgba(0,0,0,0.12));border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:12px;';
+            const title = document.createElement('div');
+            title.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:10px;';
+            const pathLabel = document.createElement('label');
+            pathLabel.style.cssText = 'display:block;font-size:12px;margin-bottom:4px;color:var(--vscode-input-foreground);';
+            const pathInput = document.createElement('input');
+            pathInput.type = 'text';
+            pathInput.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 10px;font-size:12px;border:1px solid var(--vscode-input-border);background:var(--vscode-input-background);color:var(--vscode-input-foreground);border-radius:4px;';
+            const insertWrap = document.createElement('div');
+            insertWrap.style.cssText = 'margin-top:10px;';
+            const insertLabel = document.createElement('div');
+            insertLabel.style.cssText = 'font-size:12px;margin-bottom:4px;color:var(--vscode-input-foreground);';
+            const radioWrap = document.createElement('div');
+            radioWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+            const radioRefLabel = document.createElement('label');
+            radioRefLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;';
+            const radioRef = document.createElement('input');
+            radioRef.type = 'radio';
+            radioRef.name = 'cora-inline-image-insert-as';
+            radioRef.value = 'ref';
+            radioRef.checked = true;
+            radioRefLabel.appendChild(radioRef);
+            radioRefLabel.appendChild(document.createTextNode(imageDialogLabels.ref || 'Reference file'));
+            const radioBase64Label = document.createElement('label');
+            radioBase64Label.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;';
+            const radioBase64 = document.createElement('input');
+            radioBase64.type = 'radio';
+            radioBase64.name = 'cora-inline-image-insert-as';
+            radioBase64.value = 'base64';
+            radioBase64Label.appendChild(radioBase64);
+            radioBase64Label.appendChild(document.createTextNode(imageDialogLabels.base64 || 'Base64 inline'));
+            radioWrap.appendChild(radioRefLabel);
+            radioWrap.appendChild(radioBase64Label);
+            insertWrap.appendChild(insertLabel);
+            insertWrap.appendChild(radioWrap);
+            const errorEl = document.createElement('div');
+            errorEl.style.cssText = 'display:none;color:var(--vscode-errorForeground);font-size:12px;margin-top:6px;';
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px;';
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.textContent = imageDialogLabels.cancel || 'Cancel';
+            cancelBtn.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:4px;border:1px solid var(--vscode-button-border);background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);cursor:pointer;';
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.textContent = imageDialogLabels.confirm || 'OK';
+            confirmBtn.style.cssText = 'padding:6px 12px;font-size:12px;border-radius:4px;border:1px solid var(--vscode-button-border);background:var(--vscode-button-background);color:var(--vscode-button-foreground);cursor:pointer;';
+            actions.appendChild(cancelBtn);
+            actions.appendChild(confirmBtn);
+            panel.appendChild(title);
+            panel.appendChild(pathLabel);
+            panel.appendChild(pathInput);
+            panel.appendChild(insertWrap);
+            panel.appendChild(errorEl);
+            panel.appendChild(actions);
+            overlay.addEventListener('click', () => closeInlineImageDialog(true));
+            cancelBtn.addEventListener('click', () => closeInlineImageDialog(true));
+            confirmBtn.addEventListener('click', () => {
+                const pending = inlineImageDialog && inlineImageDialog.pending;
+                if (!pending) return;
+                const val = (pathInput.value || '').trim().replace(/\\/g, '/');
+                if (!val || val.indexOf('..') !== -1) {
+                    errorEl.textContent = '路径不能为空，且不能包含 ..';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                errorEl.style.display = 'none';
+                const insertAs = radioBase64.checked ? 'base64' : 'ref';
+                vscode.postMessage({
+                    command: 'saveImageFromBase64',
+                    documentUri: window.__CORA_DOCUMENT_URI__,
+                    imageDataBase64: pending.base64,
+                    mimeType: pending.mimeType,
+                    pathInput: val,
+                    insertAs,
+                    requestKind: pending.kind,
+                });
+                closeInlineImageDialog(false);
+            });
+            document.body.appendChild(overlay);
+            document.body.appendChild(panel);
+            inlineImageDialog = { overlay, panel, title, pathLabel, pathInput, insertWrap, insertLabel, radioRef, radioBase64, errorEl, pending: null };
+            return inlineImageDialog;
+        }
+        function openInlineImageDialog(options) {
+            const dialog = ensureInlineImageDialog();
+            dialog.pending = options;
+            dialog.title.textContent = options.kind === 'switchToRef'
+                ? (imageDialogLabels.convertToRefTitle || 'Convert to reference file')
+                : (imageDialogLabels.pasteTitle || 'Paste Image');
+            dialog.pathLabel.textContent = imageDialogLabels.pathPrompt || 'Enter save path and filename';
+            dialog.pathInput.value = options.suggestedPath || '';
+            dialog.pathInput.placeholder = imageDialogLabels.pathPlaceholder || '';
+            dialog.insertLabel.textContent = imageDialogLabels.insertPrompt || 'Insert as';
+            dialog.insertWrap.style.display = options.kind === 'switchToRef' ? 'none' : 'block';
+            dialog.radioRef.checked = true;
+            dialog.radioBase64.checked = false;
+            dialog.errorEl.style.display = 'none';
+            dialog.overlay.style.display = 'block';
+            dialog.panel.style.display = 'block';
+            const panelWidth = 320;
+            const panelHeight = options.kind === 'switchToRef' ? 150 : 210;
+            let left = Math.round((window.innerWidth - panelWidth) / 2);
+            let top = Math.max(60, Math.round((window.innerHeight - panelHeight) / 2));
+            if (options.anchorRect) {
+                left = Math.min(window.innerWidth - panelWidth - 12, Math.max(12, Math.round(options.anchorRect.right - panelWidth)));
+                top = Math.min(window.innerHeight - panelHeight - 12, Math.max(60, Math.round(options.anchorRect.bottom + 8)));
+            }
+            dialog.panel.style.left = left + 'px';
+            dialog.panel.style.top = top + 'px';
+            setTimeout(() => {
+                dialog.pathInput.focus();
+                dialog.pathInput.select();
+            }, 0);
         }
         function replaceMarkdownImageAndSync(oldPattern, newSnippet) {
             const content = isSourceMode ? textarea.value : currentMarkdown;
@@ -1047,7 +1285,7 @@ async function initEditor() {
 
         const initialImageMap = typeof window.__CORA_IMAGE_MAP__ !== 'undefined' ? window.__CORA_IMAGE_MAP__ : {};
         setTimeout(() => applyImageMap(editorElement, initialImageMap), 100);
-        setTimeout(() => wrapImagesWithInsertOptions(getPreviewRoot()), 150);
+        setTimeout(() => bindImageInsertOptions(getPreviewRoot()), 150);
         setTimeout(() => {
             if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
         }, 300);
@@ -1067,7 +1305,7 @@ async function initEditor() {
                 } else if (window.editor) {
                     window.editor.action(replaceAll(content));
                     setTimeout(() => applyImageMap(editorElement, imageMap || {}), 50);
-                    setTimeout(() => wrapImagesWithInsertOptions(getPreviewRoot()), 80);
+                    setTimeout(() => bindImageInsertOptions(getPreviewRoot()), 80);
                     setTimeout(() => {
                         if (window.__coraOptimizeTableLayout) window.__coraOptimizeTableLayout(editorElement);
                     }, 200);
@@ -1078,12 +1316,50 @@ async function initEditor() {
                 return;
             }
 
+            if (message.command === 'imagePathSuggestionResult') {
+                if (message.error) {
+                    if (message.requestKind === 'paste') pendingPasteImage = null;
+                    if (message.requestKind === 'switchToRef') pendingImageReplace = null;
+                    return;
+                }
+                const suggestedPath = message.suggestedPath;
+                if (!suggestedPath) return;
+                if (message.requestKind === 'paste' && pendingPasteImage) {
+                    openInlineImageDialog({
+                        kind: 'paste',
+                        suggestedPath,
+                        base64: pendingPasteImage.base64,
+                        mimeType: pendingPasteImage.mimeType,
+                    });
+                    return;
+                }
+                if (message.requestKind === 'switchToRef' && pendingImageReplace && pendingImageReplace.dataUrl) {
+                    const src = pendingImageReplace.dataUrl;
+                    const mimeMatch = src.match(/^data:([^;]+);/);
+                    const base64 = src.indexOf('base64,') >= 0 ? src.split('base64,')[1] : '';
+                    if (!base64) {
+                        pendingImageReplace = null;
+                        return;
+                    }
+                    openInlineImageDialog({
+                        kind: 'switchToRef',
+                        suggestedPath,
+                        base64,
+                        mimeType: (mimeMatch && mimeMatch[1]) || 'image/png',
+                        anchorRect: pendingImageReplace.anchorRect,
+                    });
+                    return;
+                }
+                return;
+            }
+
             if (message.command === 'pasteImageResult') {
                 if (message.error) {
                     pendingPasteImage = null;
                     return;
                 }
                 const pathForRef = message.pathForRef;
+                const previewSrc = message.previewSrc;
                 const insertAs = message.insertAs;
                 let snippet = '';
                 if (insertAs === 'ref' && pathForRef) {
@@ -1094,7 +1370,8 @@ async function initEditor() {
                     pendingPasteImage = null;
                     return;
                 }
-                insertMarkdownSnippet(snippet);
+                const imageMap = insertAs === 'ref' && pathForRef && previewSrc ? { [pathForRef]: previewSrc } : undefined;
+                insertMarkdownSnippet(snippet, { imageMap });
                 pendingPasteImage = null;
                 return;
             }
@@ -1105,11 +1382,16 @@ async function initEditor() {
                     return;
                 }
                 const pathForRef = message.pathForRef;
+                const previewSrc = message.previewSrc;
                 if (!pathForRef) {
                     pendingImageReplace = null;
                     return;
                 }
                 replaceMarkdownImageAndSync(pendingImageReplace.oldPattern, `![](${pathForRef})`);
+                if (previewSrc) {
+                    setTimeout(() => applyImageMap(editorElement, { [pathForRef]: previewSrc }), 40);
+                    setTimeout(() => bindImageInsertOptions(getPreviewRoot()), 80);
+                }
                 pendingImageReplace = null;
                 return;
             }
@@ -1125,6 +1407,9 @@ async function initEditor() {
                     return;
                 }
                 replaceMarkdownImageAndSync(pendingImageReplace.oldPattern, `![](data:${mime};base64,${b64})`);
+                if (!isSourceMode) {
+                    setTimeout(() => bindImageInsertOptions(getPreviewRoot()), 80);
+                }
                 pendingImageReplace = null;
                 return;
             }
